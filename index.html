@@ -6,178 +6,230 @@
 
   <!-- Supabase JS -->
   <script defer src="https://unpkg.com/@supabase/supabase-js@1.35.6/dist/umd/supabase.js"></script>
-  <!-- jsPDF and jsPDF-AutoTable for proper table PDF -->
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- jsPDF + AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    .highlight {
+      animation: highlightAnimation 3s ease;
+    }
+
+    @keyframes highlightAnimation {
+      0%   { background-color: yellow; }
+      100% { background-color: transparent; }
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th, td {
+      border: 1px solid #333;
+      padding: 6px;
+      text-align: left;
+    }
+  </style>
 
   <script defer>
 document.addEventListener('DOMContentLoaded', async () => {
-    const supabaseUrl = 'https://cawrvnutflgvbrisuqtd.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
-    const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+  const supabaseUrl = 'https://cawrvnutflgvbrisuqtd.supabase.co';
+  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
+  const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
-    let refreshInterval = null;
-    const REFRESH_SECONDS = 5;
+  const REFRESH_SECONDS = 10;
+  let refreshInterval = null;
 
-    // Load class dropdown dynamically
-    async function loadClasses() {
-      const { data, error } = await supabaseClient
-        .from('students')
-        .select('class_name_full')
-        .order('class_name_full');
-      if (error) return console.error(error);
+  // Store previous attendance for highlighting
+  let previousPresentIds = [];
 
-      const select = document.getElementById('class-select');
-      select.innerHTML = '';
-      const uniqueClasses = [...new Set(data.map(c => c.class_name_full))];
-      uniqueClasses.forEach(c => {
-        const option = document.createElement('option');
-        option.value = c;
-        option.textContent = c;
-        select.appendChild(option);
-      });
-    }
+  // =========================
+  // Load class dropdown
+  // =========================
+  async function loadClasses() {
+    const { data, error } = await supabaseClient
+      .from('students')
+      .select('class_name_full')
+      .order('class_name_full');
 
-    function startAutoRefresh() {
-      if (refreshInterval) clearInterval(refreshInterval);
-      refreshInterval = setInterval(() => loadAttendance(), REFRESH_SECONDS * 1000);
-    }
+    if (error) { console.error('Class load error:', error); return; }
 
-    async function loadAttendance() {
-      const selectedClass = document.getElementById('class-select').value;
-      const selectedDate = document.getElementById('attendance-date').value;
+    const select = document.getElementById('class-select');
+    select.innerHTML = '';
+    const uniqueClasses = [...new Set(data.map(c => c.class_name_full))];
 
-      const todayElem = document.getElementById('today-date');
-      const presentElem = document.getElementById('present-count');
-      const absentElem = document.getElementById('absent-count');
-      const tableElem = document.getElementById('attendance-table');
-      if (!todayElem || !presentElem || !absentElem || !tableElem) return;
-
-      todayElem.innerText = 'Date: ' + selectedDate;
-
-      const { data: students, error: studentError } = await supabaseClient
-        .from('students')
-        .select('*')
-        .eq('class_name_full', selectedClass)
-        .order('name');
-      if (studentError) return console.error(studentError);
-
-      const { data: attendance, error: attError } = await supabaseClient
-        .from('students_attendance')
-        .select('*')
-        .eq('class_name', selectedClass)
-        .eq('date', selectedDate);
-      if (attError) return console.error(attError);
-
-      const merged = students.map(s => {
-        const att = attendance.find(a => a.student_id === s.id);
-        let timeStr = '—';
-        if (att?.timestamp) timeStr = att.timestamp.split('T')[1].split('.')[0];
-        return { ...s, status: att ? att.status : 'Absent', timestamp: timeStr };
-      });
-
-      // Update summary
-      presentElem.innerText = merged.filter(s => s.status === '/').length;
-      absentElem.innerText = merged.filter(s => s.status === 'Absent').length;
-
-      // Build table
-      let html = `
-        <table border="1" cellpadding="6">
-          <tr>
-            <th>Name</th>
-            <th>Standard</th>
-            <th>Barcode</th>
-            <th>Status</th>
-            <th>Time</th>
-          </tr>`;
-      merged.forEach(s => {
-        const color = s.status === '/' ? 'green' : s.status === 'Absent' ? 'red' : 'black';
-        html += `
-          <tr>
-            <td>${s.name}</td>
-            <td>${s.standard}</td>
-            <td>${s.barcode}</td>
-            <td style="color:${color}">${s.status}</td>
-            <td>${s.timestamp}</td>
-          </tr>`;
-      });
-      html += '</table>';
-      tableElem.innerHTML = html;
-    }
-
-    // ===============================
-    // Export CSV
-    // ===============================
-    function exportCSV() {
-      const table = document.querySelector('#attendance-table table');
-      if (!table) return alert('No data to export');
-
-      let csv = [];
-      table.querySelectorAll('tr').forEach(row => {
-        const cols = row.querySelectorAll('th, td');
-        csv.push(Array.from(cols).map(c => `"${c.innerText}"`).join(','));
-      });
-      const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'attendance.csv';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    // ===============================
-    // Export PDF using AutoTable
-    // ===============================
-    function exportPDF() {
-      const table = document.querySelector('#attendance-table table');
-      if (!table) return alert('No data to export');
-
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-
-      const headers = [];
-      table.querySelectorAll('tr:first-child th').forEach(th => headers.push(th.innerText));
-
-      const body = [];
-      table.querySelectorAll('tr:not(:first-child)').forEach(tr => {
-        const row = [];
-        tr.querySelectorAll('td').forEach(td => row.push(td.innerText));
-        body.push(row);
-      });
-
-      doc.autoTable({
-        head: [headers],
-        body: body,
-        startY: 20,
-        theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-        styles: { fontSize: 10 }
-      });
-
-      doc.text('Attendance - ' + document.getElementById('class-select').value, 14, 15);
-      doc.save('attendance.pdf');
-    }
-
-    // ===============================
-    // Event listeners
-    // ===============================
-    document.getElementById('class-select').addEventListener('change', () => {
-      loadAttendance();
-      startAutoRefresh();
+    uniqueClasses.forEach(c => {
+      const option = document.createElement('option');
+      option.value = c;
+      option.textContent = c;
+      select.appendChild(option);
     });
-    document.getElementById('attendance-date').addEventListener('change', loadAttendance);
-    document.getElementById('export-csv').addEventListener('click', exportCSV);
-    document.getElementById('export-pdf').addEventListener('click', exportPDF);
+  }
 
-    // ===============================
-    // Initial load
-    // ===============================
-    await loadClasses();
-    const dateInput = document.getElementById('attendance-date');
-    dateInput.value = new Date().toISOString().split('T')[0]; // today
+  // =========================
+  // Load attendance
+  // =========================
+  async function loadAttendance() {
+    const selectedClass = document.getElementById('class-select').value;
+    const selectedDate = document.getElementById('attendance-date').value || new Date().toISOString().split('T')[0];
+    document.getElementById('today-date').innerText = 'Date: ' + selectedDate;
+
+    const { data: students, error: studentError } = await supabaseClient
+      .from('students')
+      .select('*')
+      .eq('class_name_full', selectedClass)
+      .order('name');
+
+    if (studentError) { console.error(studentError); return; }
+
+    const { data: attendance, error: attError } = await supabaseClient
+      .from('students_attendance')
+      .select('*')
+      .eq('class_name', selectedClass)
+      .eq('date', selectedDate);
+
+    if (attError) { console.error(attError); return; }
+
+    // Merge students with attendance
+    const merged = students.map(s => {
+      const att = attendance.find(a => a.student_id === s.id);
+      let status = 'Absent';
+      let timestamp = '—';
+      if (att) {
+        timestamp = att.timestamp.split('T')[1] || att.timestamp.split(' ')[1];
+        status = timestamp > '08:00:00' ? 'Late' : '/';
+      }
+      return { ...s, status, timestamp };
+    });
+
+    // =========================
+    // Summary
+    // =========================
+    const totalCount = merged.length;
+    const lateCount = merged.filter(s => s.status === 'Late').length;
+    const presentCount = merged.filter(s => s.status === '/' || s.status === 'Late').length;
+    const absentCount = merged.filter(s => s.status === 'Absent').length;
+
+    document.getElementById('total-count').innerText = totalCount;
+    document.getElementById('present-count').innerText = presentCount;
+    document.getElementById('late-count').innerText = lateCount;
+    document.getElementById('absent-count').innerText = absentCount;
+
+    // =========================
+    // Render table with highlight
+    // =========================
+    const tableDiv = document.getElementById('attendance-table');
+    tableDiv.innerHTML = '';
+
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+      <tr>
+        <th>Name</th>
+        <th>Barcode</th>
+        <th>Status</th>
+        <th>Time</th>
+      </tr>`;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+
+    merged.forEach(s => {
+      const tr = document.createElement('tr');
+      let color = s.status === '/' ? 'green' : (s.status === 'Late' ? 'orange' : 'red');
+      tr.innerHTML = `
+        <td>${s.name}</td>
+        <td>${s.barcode}</td>
+        <td style="color:${color}">${s.status}</td>
+        <td>${s.timestamp}</td>
+      `;
+
+      // Highlight newly arrived students
+      if ((s.status === '/' || s.status === 'Late') && !previousPresentIds.includes(s.id)) {
+        tr.classList.add('highlight');
+      }
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    tableDiv.appendChild(table);
+
+    // Update previousPresentIds
+    previousPresentIds = merged.filter(s => s.status === '/' || s.status === 'Late').map(s => s.id);
+  }
+
+  // =========================
+  // Auto-refresh
+  // =========================
+  function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(loadAttendance, REFRESH_SECONDS * 1000);
+  }
+
+  // =========================
+  // Event listeners
+  // =========================
+  document.getElementById('class-select').addEventListener('change', () => {
     loadAttendance();
     startAutoRefresh();
+  });
+
+  document.getElementById('attendance-date').addEventListener('change', loadAttendance);
+
+  // =========================
+  // Initial load
+  // =========================
+  await loadClasses();
+  loadAttendance();
+  startAutoRefresh();
+
+  // =========================
+  // Export PDF
+  // =========================
+  document.getElementById('export-pdf').addEventListener('click', () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    const rows = [];
+    document.querySelectorAll('#attendance-table tr').forEach(tr => {
+      const row = Array.from(tr.querySelectorAll('td, th')).map(td => td.innerText);
+      rows.push(row);
+    });
+
+    doc.autoTable({ head: [rows[0]], body: rows.slice(1) });
+    doc.save('attendance.pdf');
+  });
+
+  // =========================
+  // Export CSV
+  // =========================
+  document.getElementById('export-csv').addEventListener('click', () => {
+    const table = document.getElementById('attendance-table');
+    if (!table) return;
+
+    let csv = [];
+    const rows = table.querySelectorAll('tr');
+    rows.forEach(row => {
+      const cols = row.querySelectorAll('td, th');
+      const rowData = Array.from(cols).map(col => `"${col.innerText}"`);
+      csv.push(rowData.join(','));
+    });
+
+    const csvString = csv.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'attendance.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
 });
   </script>
 </head>
@@ -198,8 +250,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   <p id="today-date"></p>
 
   <div id="summary" style="margin-bottom:15px;">
-    <strong>Present:</strong> <span id="present-count">0</span>
-    <strong>Absent:</strong> <span id="absent-count">0</span>
+    Total: <span id="total-count">0</span> | 
+    Present: <span id="present-count">0</span> | 
+    Late: <span id="late-count">0</span> | 
+    Absent: <span id="absent-count">0</span>
   </div>
 
   <div style="margin-bottom:15px;">
