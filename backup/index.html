@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Attendance Dashboard</title>
+
+  <script defer src="https://unpkg.com/@supabase/supabase-js@1.35.6/dist/umd/supabase.js"></script>
+
+  <script defer>
+document.addEventListener('DOMContentLoaded', async () => {
+
+    const supabaseUrl = 'https://cawrvnutflgvbrisuqtd.supabase.co'
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU'
+    const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey)
+    let refreshInterval = null
+    const REFRESH_SECONDS = 5   // change to 5, 15, etc
+
+
+    // ===============================
+    // Load class dropdown dynamically
+    // ===============================
+    async function loadClasses() {
+      const { data, error } = await supabaseClient
+        .from('students')
+        .select('class_name_full')
+        .order('class_name_full')
+
+      if (error) {
+        console.error('Class load error:', error)
+        return
+      }
+
+      const select = document.getElementById('class-select')
+      select.innerHTML = ''
+
+      const uniqueClasses = [...new Set(data.map(c => c.class_name_full))]
+
+      uniqueClasses.forEach(c => {
+        const option = document.createElement('option')
+        option.value = c
+        option.textContent = c
+        select.appendChild(option)
+      })
+    }
+
+    function startAutoRefresh() {
+    // Clear old timer if exists
+    if (refreshInterval) {
+      clearInterval(refreshInterval)
+    }
+
+    // Start new timer
+    refreshInterval = setInterval(() => {
+      console.log('Auto refreshing attendance...')
+      loadAttendance()
+    }, REFRESH_SECONDS * 1000)
+    }
+
+    document.getElementById('class-select').addEventListener('change', () => {
+      loadAttendance()
+      startAutoRefresh()   // restart timer for new class
+    })
+
+    // ===============================
+    // Load attendance
+    // ===============================
+    async function loadAttendance() {
+      const selectedClass = document.getElementById('class-select').value
+      const today = new Date().toISOString().split('T')[0]
+      document.getElementById('today-date').innerText = 'Date: ' + today
+
+      // Students
+      const { data: students, error: studentError } = await supabaseClient
+        .from('students')
+        .select('*')
+        .eq('class_name_full', selectedClass)
+        .order('name')
+
+      if (studentError) {
+        console.error(studentError)
+        return
+      }
+
+      // Attendance
+      const { data: attendance, error: attError } = await supabaseClient
+        .from('students_attendance')
+        .select('*')
+        .eq('class_name', selectedClass)
+        .eq('date', today)
+
+      if (attError) {
+        console.error(attError)
+        return
+      }
+
+      // Merge
+      const merged = students.map(s => {
+        const att = attendance.find(a => a.student_id === s.id)
+        return {
+          ...s,
+          status: att ? att.status : 'Absent',
+          timestamp: att ? att.timestamp : '—'
+        }
+      })
+
+      // Summary
+      document.getElementById('present-count').innerText =
+        merged.filter(s => s.status === '/').length
+      document.getElementById('absent-count').innerText =
+        merged.filter(s => s.status === 'Absent').length
+
+      // Table
+      let html = `
+        <table border="1" cellpadding="6">
+          <tr>
+            <th>Name</th>
+            <th>Standard</th>
+            <th>Barcode</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+      `
+
+      merged.forEach(s => {
+        html += `
+          <tr>
+            <td>${s.name}</td>
+            <td>${s.standard}</td>
+            <td>${s.barcode}</td>
+            <td>${s.status}</td>
+            <td>${s.timestamp}</td>
+          </tr>
+        `
+      })
+
+      html += '</table>'
+      document.getElementById('attendance-table').innerHTML = html
+    }
+
+    // Initial load
+    await loadClasses()
+    loadAttendance()
+    startAutoRefresh()
+  })
+  </script>
+</head>
+
+<body>
+  <h1>Attendance Dashboard</h1>
+  <p id="today-date"></p>
+
+  <div style="margin-bottom:15px;">
+    <label><strong>Class:</strong></label>
+    <select id="class-select"></select>
+  </div>
+
+  <div id="summary" style="margin-bottom:15px;">
+    <strong>Present:</strong> <span id="present-count">0</span>
+    <strong>Absent:</strong> <span id="absent-count">0</span>
+  </div>
+
+  <div id="attendance-table"></div>
+</body>
+</html>
