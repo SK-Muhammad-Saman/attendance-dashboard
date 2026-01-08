@@ -301,9 +301,72 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadAttendance();
   subscribeToAttendance();
 
-  // Export Buttons (PDF/CSV) code remains the same...
-  document.getElementById('export-pdf').addEventListener('click', () => { /* ... existing code ... */ });
-  document.getElementById('export-csv').addEventListener('click', () => { /* ... existing code ... */ });
+  // =========================
+  // Export PDF
+  // =========================
+  document.getElementById('export-pdf').addEventListener('click', () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    // Get the table element
+    const tableElement = document.querySelector('#attendance-table table');
+    
+    if (!tableElement) {
+      alert("No data available to export!");
+      return;
+    }
+
+    // Capture the Header and Rows
+    const headers = Array.from(tableElement.querySelectorAll('thead th')).map(th => th.innerText);
+    const rows = Array.from(tableElement.querySelectorAll('tbody tr')).map(tr => 
+      Array.from(tr.querySelectorAll('td')).map(td => td.innerText)
+    );
+
+    // Create the PDF
+    doc.text(`Attendance Report: ${document.getElementById('class-select').value}`, 14, 15);
+    doc.text(document.getElementById('today-date').innerText, 14, 22);
+    
+    doc.autoTable({
+      head: [headers],
+      body: rows,
+      startY: 25,
+      theme: 'grid'
+    });
+
+    doc.save(`Attendance_${new Date().toLocaleDateString()}.pdf`);
+  });
+
+  // =========================
+  // Export CSV
+  // =========================
+  document.getElementById('export-csv').addEventListener('click', () => {
+    const tableElement = document.querySelector('#attendance-table table');
+    if (!tableElement) return;
+
+    let csvContent = "";
+    
+    // Get Headers
+    const headers = Array.from(tableElement.querySelectorAll('thead th'))
+                         .map(th => `"${th.innerText}"`).join(",");
+    csvContent += headers + "\n";
+
+    // Get Body Rows
+    const rows = Array.from(tableElement.querySelectorAll('tbody tr')).map(tr => {
+      return Array.from(tr.querySelectorAll('td'))
+                  .map(td => `"${td.innerText}"`).join(",");
+    });
+    csvContent += rows.join("\n");
+
+    // Download Logic
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Attendance_${document.getElementById('class-select').value}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
 
 });
   </script>
