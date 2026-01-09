@@ -298,6 +298,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initial Start
   await loadClasses();
+
+  // ADD THIS LINE: Sets the date input to today's date automatically
+  document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
+
   await loadAttendance();
   subscribeToAttendance();
 
