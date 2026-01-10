@@ -1,149 +1,173 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ms">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HadirSEKEMAS Pelajar | Portal Semakan</title>
-    <meta name="description" content="Sistem Semakan Kehadiran Murid SK Muhammad Saman.">
+    <title>HadirSEKEMAS | Portal Pemantauan Murid</title>
     
     <script defer src="https://unpkg.com/@supabase/supabase-js@1.35.6/dist/umd/supabase.js"></script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
     <style>
         :root {
             --primary: #4f46e5;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --bg: #f8fafc;
-            --text: #1e293b;
+            --success: #16a34a;
+            --warning: #ca8a04;
+            --danger: #dc2626;
+            --bg: #f1f5f9;
+            --text: #0f172a;
         }
 
         body {
-            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
             background-color: var(--bg);
             color: var(--text);
-            padding: 20px;
-            max-width: 1100px;
+            padding: 15px;
+            max-width: 1200px;
             margin: 0 auto;
-            line-height: 1.5;
         }
 
-        /* Nav Header */
+        /* Header & Nav */
         .nav-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             background: white;
-            padding: 15px 25px;
-            border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .brand { display: flex; align-items: center; gap: 15px; }
+        .brand { display: flex; align-items: center; gap: 12px; }
         .brand img { width: 45px; height: 45px; border-radius: 10px; object-fit: cover; }
-        .brand h1 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; }
+        .brand h1 { margin: 0; font-size: 1.1rem; font-weight: 800; }
 
         .home-link {
             text-decoration: none;
             color: #64748b;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 700;
             display: flex;
             align-items: center;
-            gap: 5px;
-            padding: 8px 15px;
+            gap: 6px;
+            padding: 8px 14px;
             border-radius: 8px;
-            transition: all 0.2s;
             border: 1px solid #e2e8f0;
         }
-        .home-link:hover { background: #f1f5f9; color: var(--primary); }
 
-        /* Controls Card */
+        /* Controls */
         .controls {
             background: white;
-            padding: 24px;
-            border-radius: 16px;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            padding: 20px;
+            border-radius: 12px;
             display: flex;
             flex-wrap: wrap;
-            gap: 20px;
+            gap: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             align-items: flex-end;
-            margin-bottom: 25px;
-            border: 1px solid rgba(255,255,255,0.8);
         }
 
-        .control-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
-        .control-group label { font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.025em; }
-
+        .control-group { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 5px; }
+        .control-group label { font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+        
         select, input {
-            padding: 10px 14px;
+            padding: 10px;
             border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            outline: none;
-            font-size: 0.95rem;
-            transition: ring 0.2s;
+            border-radius: 8px;
+            font-size: 0.9rem;
         }
-        select:focus, input:focus { border-color: var(--primary); ring: 2px solid var(--primary); }
 
-        /* Stats Grid */
+        /* Summary Stats */
         #summary {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 16px;
-            margin-bottom: 25px;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
         }
 
         .stat-card {
             background: white;
-            padding: 18px;
-            border-radius: 16px;
+            padding: 15px;
+            border-radius: 12px;
             text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            border-bottom: 4px solid #e2e8f0;
+            border-bottom: 4px solid #cbd5e1;
         }
-        .stat-card h3 { margin: 0; font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; }
-        .stat-card p { margin: 5px 0 0; font-size: 1.8rem; font-weight: 800; }
+        .stat-card h3 { margin: 0; font-size: 0.7rem; color: #64748b; text-transform: uppercase; }
+        .stat-card p { margin: 5px 0 0; font-size: 1.6rem; font-weight: 800; }
         
         .card-total { border-color: var(--primary); color: var(--primary); }
         .card-present { border-color: var(--success); color: var(--success); }
         .card-late { border-color: var(--warning); color: var(--warning); }
         .card-absent { border-color: var(--danger); color: var(--danger); }
 
-        /* Table UI */
-        #attendance-table {
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-            border: 1px solid #f1f5f9;
+        /* Modified Absent Grid - Set to Max 4 Columns */
+        #absent-list-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border-left: 6px solid var(--danger);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; padding: 15px 20px; text-align: left; }
-        td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
-        tr:hover { background-color: #fcfcfd; }
 
-        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 800; display: inline-block; }
+        #absent-grid {
+            display: grid;
+            /* 4 column grid on large screens, adjusted on mobile */
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 12px;
+            margin-top: 12px;
+        }
 
-        /* Highlighting new scans */
-        .highlight { animation: highlightAnimation 2s ease-out; }
-        @keyframes highlightAnimation {
-            0%   { background-color: #fef9c3; }
+        .absent-item {
+            font-size: 0.8rem;
+            color: #475569;
+            padding: 10px 12px;
+            background: #fff1f2;
+            border-radius: 8px;
+            border: 1px solid #fecaca;
+            font-weight: 600;
+            /* Allow text to breathe */
+            white-space: normal; 
+            line-height: 1.3;
+        }
+
+        /* Responsive Table */
+        .table-responsive {
+            background: white;
+            border-radius: 12px;
+            overflow-x: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-top: 10px;
+        }
+
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th { background: #f8fafc; padding: 12px 15px; text-align: left; font-size: 0.7rem; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
+        td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+
+        .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.65rem; font-weight: 800; }
+
+        .new-scan-row { animation: highlightFade 3s ease-out; }
+        @keyframes highlightFade {
+            0% { background-color: #fef9c3; }
             100% { background-color: transparent; }
         }
 
-        /* Buttons */
-        .btn { padding: 10px 20px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; transition: 0.2s; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
-        .btn-primary { background: #1e293b; color: white; }
-        .btn-secondary { background: white; color: #1e293b; border: 1px solid #e2e8f0; }
-        .btn:hover { transform: translateY(-1px); opacity: 0.9; }
+        .btn { padding: 10px 16px; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
+        .btn-pdf { background: #1e293b; color: white; }
+        .btn-csv { background: #f1f5f9; color: #1e293b; border: 1px solid #e2e8f0; }
 
-        @media (max-width: 640px) {
-            .controls { flex-direction: column; align-items: stretch; }
+        /* Phone & Tablet Adjustment */
+        @media (max-width: 900px) {
+            #absent-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 600px) {
+            .nav-header { flex-direction: column; gap: 15px; }
             #summary { grid-template-columns: 1fr 1fr; }
+            #absent-grid { grid-template-columns: 1fr; }
+            .controls { flex-direction: column; align-items: stretch; }
         }
     </style>
 
@@ -154,16 +178,14 @@
             const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
             let attendanceSubscription = null;
-            let previousPresentIds = [];
+            let lastAttendanceId = null;
             const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
-            // --- DATA LOADING ---
             async function loadClasses() {
-                const { data, error } = await supabaseClient.from('students').select('class_name_full');
-                if (error) return;
-                const select = document.getElementById('class-select');
+                const { data } = await supabaseClient.from('students').select('class_name_full');
+                if (!data) return;
                 const uniqueClasses = [...new Set(data.map(c => c.class_name_full))].sort();
-                select.innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
+                document.getElementById('class-select').innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
             }
 
             async function loadAttendance() {
@@ -181,102 +203,80 @@
 
                 let merged = students.map(s => {
                     const att = attendance.find(a => String(a.student_id) === String(s.id));
-                    let status = 'Absent', timestamp = '—';
+                    let status = 'TIADA', timestamp = '—', attId = null;
                     if (att) {
+                        attId = att.id;
                         timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,8) : att.timestamp.split(' ')[1];
-                        const [hours, minutes] = timestamp.split(':').map(Number);
-                        status = (hours > 8 || (hours === 8 && minutes > 0)) ? 'Late' : 'Present';
+                        const [h, m] = timestamp.split(':').map(Number);
+                        status = (h > 8 || (h === 8 && m > 0)) ? 'LEWAT' : 'HADIR';
                     }
-                    return { ...s, status, timestamp };
+                    return { ...s, status, timestamp, attId };
                 });
 
-                // Sort & Filter
                 merged.sort((a, b) => sortBy === 'name' ? a.name.localeCompare(b.name) : a.barcode.localeCompare(b.barcode));
                 const filtered = merged.filter(s => s.name.toLowerCase().includes(searchQuery) || s.barcode.includes(searchQuery));
 
-                renderSummary(merged); 
-                renderTable(filtered);
-                renderAbsentList(merged);
-
-                document.getElementById('last-updated').innerText = `Last Sync: ${new Date().toLocaleTimeString()}`;
-
-                // Sound Logic
-                const currentPresentIds = merged.filter(s => s.status !== 'Absent').map(s => s.id);
-                if (currentPresentIds.length > previousPresentIds.length && previousPresentIds.length > 0) {
-                    scanSound.play().catch(() => {});
+                const latestRecord = attendance.sort((a,b) => b.id - a.id)[0];
+                if (latestRecord && latestRecord.id !== lastAttendanceId) {
+                    if (lastAttendanceId !== null) scanSound.play().catch(() => {});
+                    lastAttendanceId = latestRecord.id;
                 }
-                previousPresentIds = currentPresentIds;
+
+                renderDashboard(merged, filtered, latestRecord?.id);
+                document.getElementById('last-updated').innerText = `Sync: ${new Date().toLocaleTimeString()}`;
             }
 
-            function renderSummary(merged) {
-                document.getElementById('total-count').innerText = merged.length;
-                document.getElementById('present-count').innerText = merged.filter(s => s.status !== 'Absent').length;
-                document.getElementById('late-count').innerText = merged.filter(s => s.status === 'Late').length;
-                document.getElementById('absent-count').innerText = merged.filter(s => s.status === 'Absent').length;
-            }
+            function renderDashboard(fullData, filteredData, highlightId) {
+                document.getElementById('total-count').innerText = fullData.length;
+                document.getElementById('present-count').innerText = fullData.filter(s => s.status !== 'TIADA').length;
+                document.getElementById('late-count').innerText = fullData.filter(s => s.status === 'LEWAT').length;
+                document.getElementById('absent-count').innerText = fullData.filter(s => s.status === 'TIADA').length;
 
-            function renderTable(data) {
+                // Absent Grid
+                const absentees = fullData.filter(s => s.status === 'TIADA');
+                const grid = document.getElementById('absent-grid');
+                if (absentees.length === 0) {
+                    grid.innerHTML = '<p style="color:var(--success); font-weight:700;">🎉 Semua murid kelas ini telah hadir!</p>';
+                } else {
+                    grid.innerHTML = absentees.map(s => `<div class="absent-item">👤 ${s.name}</div>`).join('');
+                }
+
                 const tbody = document.getElementById('attendance-tbody');
-                tbody.innerHTML = data.map(s => {
-                    let badgeClass = s.status === 'Present' ? 'background:#dcfce7;color:#166534' : 
-                                     s.status === 'Late' ? 'background:#fef9c3;color:#854d0e' : 'background:#fee2e2;color:#991b1b';
-                    return `
-                        <tr>
-                            <td style="font-weight:700;">${s.name}</td>
-                            <td style="font-family:monospace;color:#64748b;">${s.barcode}</td>
-                            <td><span class="badge" style="${badgeClass}">${s.status.toUpperCase()}</span></td>
-                            <td style="color:#64748b;">${s.timestamp}</td>
-                        </tr>`;
+                tbody.innerHTML = filteredData.map(s => {
+                    const isNew = s.attId === highlightId ? 'new-scan-row' : '';
+                    let badgeStyle = s.status === 'HADIR' ? 'background:#dcfce7;color:#166534' : 
+                                     s.status === 'LEWAT' ? 'background:#fef9c3;color:#854d0e' : 'background:#fee2e2;color:#991b1b';
+                    
+                    return `<tr class="${isNew}">
+                        <td style="font-weight:700;">${s.name}</td>
+                        <td style="color:#64748b; font-family:monospace; font-size:0.8rem;">${s.barcode}</td>
+                        <td><span class="badge" style="${badgeStyle}">${s.status}</span></td>
+                        <td style="color:#64748b;">${s.timestamp}</td>
+                    </tr>`;
                 }).join('');
             }
 
-            function renderAbsentList(merged) {
-                const container = document.getElementById('absent-list-container');
-                const listDiv = document.getElementById('absent-list');
-                const absentees = merged.filter(s => s.status === 'Absent');
-                
-                if (absentees.length > 0) {
-                    container.style.display = 'block';
-                    container.style.background = '#fff1f2';
-                    container.style.borderColor = 'var(--danger)';
-                    listDiv.innerHTML = absentees.map(s => `• ${s.name}`).join('<br>');
-                } else {
-                    container.style.display = 'block';
-                    container.style.background = '#f0fdf4';
-                    container.style.borderColor = 'var(--success)';
-                    listDiv.innerHTML = '<span style="color: #166534;">🎉 Semua murid telah hadir!</span>';
-                }
-            }
-
-            async function subscribeToAttendance() {
+            function subscribeRealtime() {
                 if (attendanceSubscription) supabaseClient.removeSubscription(attendanceSubscription);
-                attendanceSubscription = supabaseClient
-                    .from('students_attendance')
-                    .on('INSERT', (payload) => {
-                        if (payload.new.class_name === document.getElementById('class-select').value) loadAttendance();
-                    })
-                    .subscribe((status) => {
-                        document.getElementById('status-dot').style.background = (status === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
-                    });
+                attendanceSubscription = supabaseClient.from('students_attendance').on('INSERT', (p) => {
+                    if (p.new.class_name === document.getElementById('class-select').value) loadAttendance();
+                }).subscribe((s) => {
+                    document.getElementById('status-dot').style.background = (s === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
+                });
             }
 
-            // Events
-            document.getElementById('class-select').addEventListener('change', () => { loadAttendance(); subscribeToAttendance(); });
-            document.getElementById('attendance-date').addEventListener('change', loadAttendance);
-            document.getElementById('sort-by').addEventListener('change', loadAttendance);
-            document.getElementById('search-input').addEventListener('input', loadAttendance);
-
-            // PDF/CSV Exports
-            document.getElementById('export-pdf').addEventListener('click', () => {
+            document.getElementById('export-pdf').onclick = () => {
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                doc.text(`Laporan Kehadiran: ${document.getElementById('class-select').value}`, 14, 15);
-                doc.autoTable({ html: '#main-table', startY: 25, theme: 'grid', headStyles: {fillColor: [79, 70, 229]} });
-                doc.save(`Kehadiran_${document.getElementById('class-select').value}.pdf`);
-            });
+                const cls = document.getElementById('class-select').value;
+                doc.text(`Laporan Kehadiran: ${cls}`, 14, 15);
+                doc.autoTable({ html: '#main-table', startY: 25, headStyles: {fillColor: [79, 70, 229]} });
+                doc.save(`Kehadiran_${cls}.pdf`);
+            };
 
-            document.getElementById('export-csv').addEventListener('click', () => {
-                let csv = "Name,Barcode,Status,Time\n";
+            document.getElementById('export-csv').onclick = () => {
+                const cls = document.getElementById('class-select').value;
+                let csv = "Nama Murid,Barcode,Status,Waktu\n";
                 document.querySelectorAll("#attendance-tbody tr").forEach(tr => {
                     const row = Array.from(tr.querySelectorAll("td")).map(td => `"${td.innerText}"`).join(",");
                     csv += row + "\n";
@@ -284,37 +284,41 @@
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
-                a.href = url; a.download = `Kehadiran_${document.getElementById('class-select').value}.csv`; a.click();
-            });
+                a.href = url; a.download = `Kehadiran_${cls}.csv`; a.click();
+            };
 
-            // Init
+            document.getElementById('class-select').onchange = () => { loadAttendance(); subscribeRealtime(); };
+            document.getElementById('attendance-date').onchange = loadAttendance;
+            document.getElementById('sort-by').onchange = loadAttendance;
+            document.getElementById('search-input').oninput = loadAttendance;
+
             document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
             await loadClasses();
             await loadAttendance();
-            subscribeToAttendance();
+            subscribeRealtime();
         });
     </script>
 </head>
-
 <body>
+
     <header class="nav-header">
         <div class="brand">
             <img src="assets/school_logo.jpg" alt="Logo">
             <div>
                 <h1>HadirSEKEMAS</h1>
-                <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Portal Kehadiran Murid</span>
+                <p style="margin:0; font-size:0.65rem; color:#94a3b8; font-weight:700; text-transform:uppercase;">Portal Kehadiran Murid</p>
             </div>
         </div>
         <a href="https://hadirsekemas.github.io/" class="home-link">
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
             UTAMA
         </a>
     </header>
 
-    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-left: 5px;">
-        <div id="status-dot" style="width: 10px; height: 10px; background: #ccc; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 1px #e2e8f0;"></div>
-        <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Live Updates Active</span>
-        <span id="last-updated" style="font-size: 0.75rem; color: #94a3b8; margin-left: auto; font-style: italic;"></span>
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 0 5px;">
+        <div id="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #ccc; border: 2px solid white;"></div>
+        <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">LIVE UPDATES</span>
+        <span id="last-updated" style="font-size: 0.7rem; color: #94a3b8; margin-left: auto; font-style: italic;"></span>
     </div>
 
     <div class="controls">
@@ -322,52 +326,45 @@
             <label>Pilih Kelas</label>
             <select id="class-select"></select>
         </div>
-        
         <div class="control-group">
             <label>Tarikh Semakan</label>
             <input type="date" id="attendance-date">
         </div>
-
-        <div style="display: flex; gap: 10px;">
-            <button id="export-pdf" class="btn btn-primary">Print PDF</button>
-            <button id="export-csv" class="btn btn-secondary">CSV</button>
+        <div style="display:flex; gap:10px;">
+            <button id="export-pdf" class="btn btn-pdf">PDF</button>
+            <button id="export-csv" class="btn btn-csv">CSV</button>
         </div>
     </div>
 
     <div id="summary">
-        <div class="stat-card card-total"><h3>Total</h3><p id="total-count">0</p></div>
+        <div class="stat-card card-total"><h3>Jumlah Pelajar</h3><p id="total-count">0</p></div>
         <div class="stat-card card-present"><h3>Hadir</h3><p id="present-count">0</p></div>
         <div class="stat-card card-late"><h3>Lewat</h3><p id="late-count">0</p></div>
-        <div class="stat-card card-absent"><h3>Tiada</h3><p id="absent-count">0</p></div>
+        <div class="stat-card card-absent"><h3>Tidak Hadir/Imbas</h3><p id="absent-count">0</p></div>
     </div>
 
-    <div id="absent-list-container" style="display: none; padding: 20px; border-radius: 16px; margin-bottom: 25px; border-left: 6px solid var(--danger);">
-        <h3 style="margin: 0 0 8px 0; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; color: #1e293b;">Belum Imbas Kehadiran:</h3>
-        <div id="absent-list" style="font-size: 0.95rem; line-height: 1.6; font-weight: 500;"></div>
+    <div id="absent-list-container">
+        <h3 style="margin:0; font-size:0.75rem; color:var(--danger); font-weight:800; text-transform:uppercase;">Murid Belum Imbas Kehadiran:</h3>
+        <div id="absent-grid"></div>
     </div>
 
-    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
-        <h2 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: #334155;">Senarai Nama Murid</h2>
-        
-        <div style="display: flex; gap: 12px;">
-            <div class="control-group" style="min-width: 120px;">
-                <select id="sort-by" style="padding: 6px 10px; font-size: 0.8rem;">
-                    <option value="name">Nama (A-Z)</option>
-                    <option value="barcode">ID Barcode</option>
-                </select>
-            </div>
-            <div class="control-group" style="min-width: 150px;">
-                <input type="text" id="search-input" placeholder="Cari nama..." style="padding: 6px 10px; font-size: 0.8rem;">
-            </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin: 25px 0 10px 0; padding: 0 5px; flex-wrap: wrap; gap: 10px;">
+        <h2 style="margin: 0; font-size: 1rem; font-weight: 800; color: #334155;">Senarai Kehadiran</h2>
+        <div style="display: flex; gap: 8px;">
+            <select id="sort-by" style="padding: 6px 10px; font-size: 0.75rem; border-radius: 8px;">
+                <option value="name">Susun: Nama</option>
+                <option value="barcode">Susun: Barcode</option>
+            </select>
+            <input type="text" id="search-input" placeholder="Cari nama..." style="padding: 6px 10px; font-size: 0.75rem; border-radius: 8px; width: 140px;">
         </div>
     </div>
 
-    <div id="attendance-table">
+    <div class="table-responsive">
         <table id="main-table">
             <thead>
                 <tr>
                     <th>Nama Murid</th>
-                    <th>Barcode</th>
+                    <th>ID Barcode</th>
                     <th>Status</th>
                     <th>Waktu Masuk</th>
                 </tr>
