@@ -143,14 +143,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function loadAttendance() {
     const selectedClass = document.getElementById('class-select').value;
     const selectedDate = document.getElementById('attendance-date').value || new Date().toISOString().split('T')[0];
+    const sortBy = document.getElementById('sort-by')?.value || 'name';
+    const searchQuery = document.getElementById('search-input').value.toLowerCase();
+    
     document.getElementById('today-date').innerText = 'Date: ' + selectedDate;
 
     // 1. Fetch data from Supabase
     const { data: students } = await supabaseClient
       .from('students')
       .select('*')
-      .eq('class_name_full', selectedClass)
-      .order('name');
+      .eq('class_name_full', selectedClass);
 
     const { data: attendance } = await supabaseClient
       .from('students_attendance')
@@ -159,54 +161,54 @@ document.addEventListener('DOMContentLoaded', async () => {
       .eq('date', selectedDate);
 
     // 2. Merge and determine status
-    const merged = students.map(s => {
+    let merged = students.map(s => {
       const att = attendance.find(a => a.student_id === s.id);
       let status = 'Absent', timestamp = '—';
-      
       if (att) {
         timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1] : att.timestamp.split(' ')[1];
         const [hours, minutes] = timestamp.split(':').map(Number);
-        
-        // Late if after 08:00:00
         status = (hours > 8 || (hours === 8 && minutes > 0)) ? 'Late' : '/';
       }
       return { ...s, status, timestamp };
     });
 
-    // 3. Update UI
-    renderSummary(merged);
-    renderTable(merged);
+    // --- SORTING LOGIC ---
+    merged.sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      if (sortBy === 'barcode') return a.barcode.toString().localeCompare(b.barcode.toString());
+      return 0;
+    });
+
+    // --- SEARCHING LOGIC ---
+    const filtered = merged.filter(s => 
+      s.name.toLowerCase().includes(searchQuery) || 
+      s.barcode.toString().includes(searchQuery)
+    );
+
+    // 3. Update UI (Always render based on merged for summary, but filtered for table)
+    renderSummary(merged); 
+    renderTable(filtered); // Table only shows searched results
     renderAbsentList(merged);
 
     // 4. Update "Last Updated" timestamp
     const now = new Date();
     const lastUpdatedElem = document.getElementById('last-updated');
-    if (lastUpdatedElem) {
-      lastUpdatedElem.innerText = `Last Sync: ${now.toLocaleTimeString()}`;
-    }
+    if (lastUpdatedElem) lastUpdatedElem.innerText = `Last Sync: ${now.toLocaleTimeString()}`;
 
-    // 5. Play sound for new arrivals (anyone not Absent who wasn't there before)
+    // 5. Sound logic
     const currentPresentIds = merged.filter(s => s.status !== 'Absent').map(s => s.id);
     const newArrivals = currentPresentIds.filter(id => !previousPresentIds.includes(id));
-    
     if (newArrivals.length > 0 && previousPresentIds.length > 0) {
-      scanSound.play().catch(() => {
-        console.log("Audio playback blocked by browser until user interacts with page.");
-      });
+      scanSound.play().catch(() => {});
     }
-    
-    // Save current state for the next comparison
     previousPresentIds = currentPresentIds;
   }
 
-  // UPDATED SUMMARY FUNCTION FOR YOUR NEW LOGIC
   function renderSummary(merged) {
     const totalCount = merged.length;
     const lateCount = merged.filter(s => s.status === 'Late').length;
-    const absentCount = merged.filter(s => s.status === 'Absent').length;
-    
-    // Logic: Present = (/) + (Late)
     const presentCount = merged.filter(s => s.status === '/' || s.status === 'Late').length;
+    const absentCount = merged.filter(s => s.status === 'Absent').length;
 
     document.getElementById('total-count').innerText = totalCount;
     document.getElementById('present-count').innerText = presentCount;
@@ -214,24 +216,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('absent-count').innerText = absentCount;
   }
 
-  function renderSummary(merged) {
-    const totalCount = merged.length;
-    const lateCount = merged.filter(s => s.status === 'Late').length;
-    
-    // Logic: Present = standard present (/) + late arrivals
-    const presentCount = merged.filter(s => s.status === '/' || s.status === 'Late').length;
-    
-    const absentCount = merged.filter(s => s.status === 'Absent').length;
-
-    document.getElementById('total-count').innerText = totalCount;
-    document.getElementById('present-count').innerText = presentCount; // Now 9 in your example
-    document.getElementById('late-count').innerText = lateCount;       // Still 6
-    document.getElementById('absent-count').innerText = absentCount;
-  }
-
-  function renderTable(merged) {
+  function renderTable(dataToDisplay) {
     const tableDiv = document.getElementById('attendance-table');
-    tableDiv.innerHTML = ''; // Clear the "Updating..." or old table
+    tableDiv.innerHTML = ''; 
 
     const table = document.createElement('table');
     table.innerHTML = `
@@ -239,11 +226,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         <tr><th>Name</th><th>Barcode</th><th>Status</th><th>Time</th></tr>
       </thead>
       <tbody>
-        ${merged.map(s => {
-            // Logic for professional status badges
+        ${dataToDisplay.map(s => {
             let badgeColor = "";
             let statusText = s.status === '/' ? 'PRESENT' : s.status.toUpperCase();
-            
             if (s.status === '/') badgeColor = "background: #dcfce7; color: #166534;";
             else if (s.status === 'Late') badgeColor = "background: #fef9c3; color: #854d0e;";
             else badgeColor = "background: #fee2e2; color: #991b1b;";
@@ -269,16 +254,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderAbsentList(merged) {
     const container = document.getElementById('absent-list-container');
     const listDiv = document.getElementById('absent-list');
-    
-    // Filter for students who are marked 'Absent'
     const absentees = merged.filter(s => s.status === 'Absent');
-
     if (absentees.length > 0) {
-      container.style.display = 'block'; // Show the box
-      // Join names with a bullet point or comma
+      container.style.display = 'block';
       listDiv.innerHTML = absentees.map(s => `• ${s.name}`).join('<br>');
     } else {
-      // If everyone is here, hide the box or show a success message
       container.style.display = 'block';
       container.style.backgroundColor = '#f0fdf4';
       container.style.borderColor = '#bbf7d0';
@@ -289,38 +269,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function subscribeToAttendance() {
     const selectedClass = document.getElementById('class-select').value;
     const statusDot = document.getElementById('status-dot');
-
     if (attendanceSubscription) {
       await supabaseClient.removeSubscription(attendanceSubscription);
       attendanceSubscription = null;
     }
-
-    await new Promise(r => setTimeout(r, 150)); // Stabilize connection
-
+    await new Promise(r => setTimeout(r, 150)); 
     attendanceSubscription = supabaseClient
       .from('students_attendance')
       .on('INSERT', (payload) => {
-        if (payload.new.class_name === selectedClass) {
-          loadAttendance();
-        }
+        if (payload.new.class_name === selectedClass) loadAttendance();
       })
       .subscribe((status) => {
-        if (statusDot) {
-          statusDot.style.backgroundColor = (status === 'SUBSCRIBED') ? '#22c55e' : '#ef4444';
-        }
+        if (statusDot) statusDot.style.backgroundColor = (status === 'SUBSCRIBED') ? '#22c55e' : '#ef4444';
       });
   }
 
+  // EVENT LISTENERS
   document.getElementById('class-select').addEventListener('change', () => {
     document.getElementById('attendance-table').innerHTML = '<p style="text-align:center;">Switching class...</p>';
     loadAttendance();
     subscribeToAttendance();
   });
-
   document.getElementById('attendance-date').addEventListener('change', loadAttendance);
+  document.getElementById('sort-by')?.addEventListener('change', loadAttendance);
+  
+  // Searching Listener (input event makes it filter as you type)
+  document.getElementById('search-input').addEventListener('input', loadAttendance);
 
   // Initial Start
   await loadClasses();
+
+  // ADD THIS LINE: Sets the date input to today's date automatically
+  document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
+
   await loadAttendance();
   subscribeToAttendance();
 
@@ -426,27 +407,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   </div>
 
   <div id="summary">
-    <div class="stat-card card-total">
-      <h3>Total Students</h3>
-      <p id="total-count">0</p>
-    </div>
-    <div class="stat-card card-present">
-      <h3>Present</h3>
-      <p id="present-count">0</p>
-    </div>
-    <div class="stat-card card-late">
-      <h3>Late</h3>
-      <p id="late-count">0</p>
-    </div>
-    <div class="stat-card card-absent">
-      <h3>Absent</h3>
-      <p id="absent-count">0</p>
-    </div>
+    <div class="stat-card card-total"><h3>Total</h3><p id="total-count">0</p></div>
+    <div class="stat-card card-present"><h3>Present</h3><p id="present-count">0</p></div>
+    <div class="stat-card card-late"><h3>Late</h3><p id="late-count">0</p></div>
+    <div class="stat-card card-absent"><h3>Absent</h3><p id="absent-count">0</p></div>
   </div>
 
   <div id="absent-list-container" style="display: none; background: #fff1f2; border-left: 4px solid var(--danger); padding: 20px; border-radius: 12px; margin-bottom: 25px;">
     <h3 style="color: #991b1b; margin: 0 0 10px 0; font-size: 1rem;">Students Not Yet Present:</h3>
     <div id="absent-list" style="color: #b91c1c; font-weight: 500; font-size: 0.95rem; line-height: 1.6;"></div>
+  </div>
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; padding: 0 5px;">
+    <h2 style="margin: 0; font-size: 1.25rem; color: #1e293b;">Student List</h2>
+    
+    <div style="display: flex; gap: 15px;">
+      <div class="control-group">
+        <label style="font-size: 0.75rem; color: #64748b; font-weight: 600;">SORT BY</label>
+        <select id="sort-by" style="padding: 6px 10px; font-size: 0.85rem;">
+          <option value="name">Name (A-Z)</option>
+          <option value="barcode">Barcode</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label style="font-size: 0.75rem; color: #64748b; font-weight: 600;">SEARCH</label>
+        <input type="text" id="search-input" placeholder="Find student..." style="padding: 6px 10px; font-size: 0.85rem; width: 200px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      </div>
+    </div>
   </div>
 
   <div id="attendance-table"></div>

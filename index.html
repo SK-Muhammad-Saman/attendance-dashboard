@@ -1,443 +1,380 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Attendance Dashboard</title>
-
-  <!-- Supabase JS -->
-  <script defer src="https://unpkg.com/@supabase/supabase-js@1.35.6/dist/umd/supabase.js"></script>
-
-  <!-- jsPDF + AutoTable -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-
-<style>
-  :root {
-    --primary: #2563eb;
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --danger: #ef4444;
-    --bg: #f8fafc;
-    --text: #1e293b;
-  }
-
-  body {
-    font-family: 'Inter', -apple-system, sans-serif;
-    background-color: var(--bg);
-    color: var(--text);
-    padding: 40px 20px;
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-
-  h1 { font-weight: 800; letter-spacing: -0.025em; margin-bottom: 30px; color: #0f172a; }
-
-  /* Controls Card */
-  .controls {
-    background: white;
-    padding: 24px;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    display: flex;
-    gap: 24px;
-    align-items: flex-end;
-    margin-bottom: 25px;
-  }
-
-  .control-group { display: flex; flex-direction: column; gap: 8px; }
-  .control-group label { font-size: 0.85rem; font-weight: 600; color: #64748b; }
-
-  select, input[type="date"] {
-    padding: 10px 14px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    outline: none;
-    font-size: 0.95rem;
-    background: #fff;
-  }
-
-  /* Statistics Grid */
-  #summary {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 25px;
-  }
-
-  .stat-card {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    border-bottom: 4px solid #e2e8f0;
-  }
-
-  .stat-card h3 { margin: 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; }
-  .stat-card p { margin: 8px 0 0; font-size: 1.75rem; font-weight: 700; }
-  
-  .card-total { border-color: var(--primary); }
-  .card-present { border-color: var(--success); }
-  .card-late { border-color: var(--warning); }
-  .card-absent { border-color: var(--danger); }
-
-  /* Table */
-  #attendance-table {
-    background: white;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  }
-
-  table { width: 100%; border-collapse: collapse; }
-  th { background: #f1f5f9; color: #475569; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; padding: 12px 20px; text-align: left; }
-  td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; font-size: 0.95rem; }
-  tr:last-child td { border: none; }
-  tr:hover { background-color: #f8fafc; }
-
-  /* Highlighting new scans */
-  .highlight { animation: highlightAnimation 2s ease-out; }
-  @keyframes highlightAnimation {
-    0%   { background-color: #fef9c3; }
-    100% { background-color: transparent; }
-  }
-
-  /* Buttons */
-  .btn-group { margin-top: 25px; display: flex; gap: 12px; }
-  button {
-    padding: 12px 24px;
-    border-radius: 8px;
-    border: none;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 0.9rem;
-  }
-  #export-pdf { background: #1e293b; color: white; }
-  #export-csv { background: white; color: #1e293b; border: 1px solid #e2e8f0; }
-  button:hover { opacity: 0.9; transform: translateY(-1px); }
-</style>
-
-  <script defer>
-document.addEventListener('DOMContentLoaded', async () => {
-  const supabaseUrl = 'https://cawrvnutflgvbrisuqtd.supabase.co';
-  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
-  const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
-
-  let attendanceSubscription = null;
-  let previousPresentIds = [];
-  const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-
-  async function loadClasses() {
-    const { data, error } = await supabaseClient
-      .from('students')
-      .select('class_name_full')
-      .order('class_name_full');
-
-    if (error) return;
-    const select = document.getElementById('class-select');
-    const uniqueClasses = [...new Set(data.map(c => c.class_name_full))];
-    select.innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
-  }
-
-  async function loadAttendance() {
-    const selectedClass = document.getElementById('class-select').value;
-    const selectedDate = document.getElementById('attendance-date').value || new Date().toISOString().split('T')[0];
-    const sortBy = document.getElementById('sort-by')?.value || 'name';
-    const searchQuery = document.getElementById('search-input').value.toLowerCase();
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HadirSEKEMAS Pelajar | Portal Semakan</title>
+    <meta name="description" content="Sistem Semakan Kehadiran Murid SK Muhammad Saman.">
     
-    document.getElementById('today-date').innerText = 'Date: ' + selectedDate;
+    <script defer src="https://unpkg.com/@supabase/supabase-js@1.35.6/dist/umd/supabase.js"></script>
 
-    // 1. Fetch data from Supabase
-    const { data: students } = await supabaseClient
-      .from('students')
-      .select('*')
-      .eq('class_name_full', selectedClass);
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
-    const { data: attendance } = await supabaseClient
-      .from('students_attendance')
-      .select('*')
-      .eq('class_name', selectedClass)
-      .eq('date', selectedDate);
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --text: #1e293b;
+        }
 
-    // 2. Merge and determine status
-    let merged = students.map(s => {
-      const att = attendance.find(a => a.student_id === s.id);
-      let status = 'Absent', timestamp = '—';
-      if (att) {
-        timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1] : att.timestamp.split(' ')[1];
-        const [hours, minutes] = timestamp.split(':').map(Number);
-        status = (hours > 8 || (hours === 8 && minutes > 0)) ? 'Late' : '/';
-      }
-      return { ...s, status, timestamp };
-    });
+        body {
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 20px;
+            max-width: 1100px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
 
-    // --- SORTING LOGIC ---
-    merged.sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'barcode') return a.barcode.toString().localeCompare(b.barcode.toString());
-      return 0;
-    });
+        /* Nav Header */
+        .nav-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
 
-    // --- SEARCHING LOGIC ---
-    const filtered = merged.filter(s => 
-      s.name.toLowerCase().includes(searchQuery) || 
-      s.barcode.toString().includes(searchQuery)
-    );
+        .brand { display: flex; align-items: center; gap: 15px; }
+        .brand img { width: 45px; height: 45px; border-radius: 10px; object-fit: cover; }
+        .brand h1 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; }
 
-    // 3. Update UI (Always render based on merged for summary, but filtered for table)
-    renderSummary(merged); 
-    renderTable(filtered); // Table only shows searched results
-    renderAbsentList(merged);
+        .home-link {
+            text-decoration: none;
+            color: #64748b;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 8px 15px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            border: 1px solid #e2e8f0;
+        }
+        .home-link:hover { background: #f1f5f9; color: var(--primary); }
 
-    // 4. Update "Last Updated" timestamp
-    const now = new Date();
-    const lastUpdatedElem = document.getElementById('last-updated');
-    if (lastUpdatedElem) lastUpdatedElem.innerText = `Last Sync: ${now.toLocaleTimeString()}`;
+        /* Controls Card */
+        .controls {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: flex-end;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255,255,255,0.8);
+        }
 
-    // 5. Sound logic
-    const currentPresentIds = merged.filter(s => s.status !== 'Absent').map(s => s.id);
-    const newArrivals = currentPresentIds.filter(id => !previousPresentIds.includes(id));
-    if (newArrivals.length > 0 && previousPresentIds.length > 0) {
-      scanSound.play().catch(() => {});
-    }
-    previousPresentIds = currentPresentIds;
-  }
+        .control-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
+        .control-group label { font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.025em; }
 
-  function renderSummary(merged) {
-    const totalCount = merged.length;
-    const lateCount = merged.filter(s => s.status === 'Late').length;
-    const presentCount = merged.filter(s => s.status === '/' || s.status === 'Late').length;
-    const absentCount = merged.filter(s => s.status === 'Absent').length;
+        select, input {
+            padding: 10px 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            outline: none;
+            font-size: 0.95rem;
+            transition: ring 0.2s;
+        }
+        select:focus, input:focus { border-color: var(--primary); ring: 2px solid var(--primary); }
 
-    document.getElementById('total-count').innerText = totalCount;
-    document.getElementById('present-count').innerText = presentCount;
-    document.getElementById('late-count').innerText = lateCount;
-    document.getElementById('absent-count').innerText = absentCount;
-  }
+        /* Stats Grid */
+        #summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 25px;
+        }
 
-  function renderTable(dataToDisplay) {
-    const tableDiv = document.getElementById('attendance-table');
-    tableDiv.innerHTML = ''; 
+        .stat-card {
+            background: white;
+            padding: 18px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border-bottom: 4px solid #e2e8f0;
+        }
+        .stat-card h3 { margin: 0; font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; }
+        .stat-card p { margin: 5px 0 0; font-size: 1.8rem; font-weight: 800; }
+        
+        .card-total { border-color: var(--primary); color: var(--primary); }
+        .card-present { border-color: var(--success); color: var(--success); }
+        .card-late { border-color: var(--warning); color: var(--warning); }
+        .card-absent { border-color: var(--danger); color: var(--danger); }
 
-    const table = document.createElement('table');
-    table.innerHTML = `
-      <thead>
-        <tr><th>Name</th><th>Barcode</th><th>Status</th><th>Time</th></tr>
-      </thead>
-      <tbody>
-        ${dataToDisplay.map(s => {
-            let badgeColor = "";
-            let statusText = s.status === '/' ? 'PRESENT' : s.status.toUpperCase();
-            if (s.status === '/') badgeColor = "background: #dcfce7; color: #166534;";
-            else if (s.status === 'Late') badgeColor = "background: #fef9c3; color: #854d0e;";
-            else badgeColor = "background: #fee2e2; color: #991b1b;";
+        /* Table UI */
+        #attendance-table {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            border: 1px solid #f1f5f9;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; padding: 15px 20px; text-align: left; }
+        td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+        tr:hover { background-color: #fcfcfd; }
 
-            const isNew = (s.status === '/' || s.status === 'Late') && !previousPresentIds.includes(s.id);
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 800; display: inline-block; }
 
-            return `
-              <tr class="${isNew ? 'highlight' : ''}">
-                <td style="font-weight: 600; color: #1e293b;">${s.name}</td>
-                <td style="color: #64748b; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;">${s.barcode}</td>
-                <td>
-                  <span style="display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 800; ${badgeColor}">
-                    ${statusText}
-                  </span>
-                </td>
-                <td style="color: #64748b; font-size: 0.9rem;">${s.timestamp}</td>
-              </tr>`;
-        }).join('')}
-      </tbody>`;
-    tableDiv.appendChild(table);
-  }
+        /* Highlighting new scans */
+        .highlight { animation: highlightAnimation 2s ease-out; }
+        @keyframes highlightAnimation {
+            0%   { background-color: #fef9c3; }
+            100% { background-color: transparent; }
+        }
 
-  function renderAbsentList(merged) {
-    const container = document.getElementById('absent-list-container');
-    const listDiv = document.getElementById('absent-list');
-    const absentees = merged.filter(s => s.status === 'Absent');
-    if (absentees.length > 0) {
-      container.style.display = 'block';
-      listDiv.innerHTML = absentees.map(s => `• ${s.name}`).join('<br>');
-    } else {
-      container.style.display = 'block';
-      container.style.backgroundColor = '#f0fdf4';
-      container.style.borderColor = '#bbf7d0';
-      listDiv.innerHTML = '<span style="color: #166534;">🎉 All students are present!</span>';
-    }
-  } 
+        /* Buttons */
+        .btn { padding: 10px 20px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; transition: 0.2s; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
+        .btn-primary { background: #1e293b; color: white; }
+        .btn-secondary { background: white; color: #1e293b; border: 1px solid #e2e8f0; }
+        .btn:hover { transform: translateY(-1px); opacity: 0.9; }
 
-  async function subscribeToAttendance() {
-    const selectedClass = document.getElementById('class-select').value;
-    const statusDot = document.getElementById('status-dot');
-    if (attendanceSubscription) {
-      await supabaseClient.removeSubscription(attendanceSubscription);
-      attendanceSubscription = null;
-    }
-    await new Promise(r => setTimeout(r, 150)); 
-    attendanceSubscription = supabaseClient
-      .from('students_attendance')
-      .on('INSERT', (payload) => {
-        if (payload.new.class_name === selectedClass) loadAttendance();
-      })
-      .subscribe((status) => {
-        if (statusDot) statusDot.style.backgroundColor = (status === 'SUBSCRIBED') ? '#22c55e' : '#ef4444';
-      });
-  }
+        @media (max-width: 640px) {
+            .controls { flex-direction: column; align-items: stretch; }
+            #summary { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
 
-  // EVENT LISTENERS
-  document.getElementById('class-select').addEventListener('change', () => {
-    document.getElementById('attendance-table').innerHTML = '<p style="text-align:center;">Switching class...</p>';
-    loadAttendance();
-    subscribeToAttendance();
-  });
-  document.getElementById('attendance-date').addEventListener('change', loadAttendance);
-  document.getElementById('sort-by')?.addEventListener('change', loadAttendance);
-  
-  // Searching Listener (input event makes it filter as you type)
-  document.getElementById('search-input').addEventListener('input', loadAttendance);
+    <script defer>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const supabaseUrl = 'https://cawrvnutflgvbrisuqtd.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
+            const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
-  // Initial Start
-  await loadClasses();
+            let attendanceSubscription = null;
+            let previousPresentIds = [];
+            const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
-  // ADD THIS LINE: Sets the date input to today's date automatically
-  document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
+            // --- DATA LOADING ---
+            async function loadClasses() {
+                const { data, error } = await supabaseClient.from('students').select('class_name_full');
+                if (error) return;
+                const select = document.getElementById('class-select');
+                const uniqueClasses = [...new Set(data.map(c => c.class_name_full))].sort();
+                select.innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
 
-  await loadAttendance();
-  subscribeToAttendance();
+            async function loadAttendance() {
+                const selectedClass = document.getElementById('class-select').value;
+                const selectedDate = document.getElementById('attendance-date').value;
+                const sortBy = document.getElementById('sort-by').value;
+                const searchQuery = document.getElementById('search-input').value.toLowerCase();
+                
+                if (!selectedClass) return;
 
-  // =========================
-  // Export PDF
-  // =========================
-  document.getElementById('export-pdf').addEventListener('click', () => {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    
-    // Get the table element
-    const tableElement = document.querySelector('#attendance-table table');
-    
-    if (!tableElement) {
-      alert("No data available to export!");
-      return;
-    }
+                const [{ data: students }, { data: attendance }] = await Promise.all([
+                    supabaseClient.from('students').select('*').eq('class_name_full', selectedClass),
+                    supabaseClient.from('students_attendance').select('*').eq('class_name', selectedClass).eq('date', selectedDate)
+                ]);
 
-    // Capture the Header and Rows
-    const headers = Array.from(tableElement.querySelectorAll('thead th')).map(th => th.innerText);
-    const rows = Array.from(tableElement.querySelectorAll('tbody tr')).map(tr => 
-      Array.from(tr.querySelectorAll('td')).map(td => td.innerText)
-    );
+                let merged = students.map(s => {
+                    const att = attendance.find(a => String(a.student_id) === String(s.id));
+                    let status = 'Absent', timestamp = '—';
+                    if (att) {
+                        timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,8) : att.timestamp.split(' ')[1];
+                        const [hours, minutes] = timestamp.split(':').map(Number);
+                        status = (hours > 8 || (hours === 8 && minutes > 0)) ? 'Late' : 'Present';
+                    }
+                    return { ...s, status, timestamp };
+                });
 
-    // Create the PDF
-    doc.text(`Attendance Report: ${document.getElementById('class-select').value}`, 14, 15);
-    doc.text(document.getElementById('today-date').innerText, 14, 22);
-    
-    doc.autoTable({
-      head: [headers],
-      body: rows,
-      startY: 25,
-      theme: 'grid'
-    });
+                // Sort & Filter
+                merged.sort((a, b) => sortBy === 'name' ? a.name.localeCompare(b.name) : a.barcode.localeCompare(b.barcode));
+                const filtered = merged.filter(s => s.name.toLowerCase().includes(searchQuery) || s.barcode.includes(searchQuery));
 
-    doc.save(`Attendance_${new Date().toLocaleDateString()}.pdf`);
-  });
+                renderSummary(merged); 
+                renderTable(filtered);
+                renderAbsentList(merged);
 
-  // =========================
-  // Export CSV
-  // =========================
-  document.getElementById('export-csv').addEventListener('click', () => {
-    const tableElement = document.querySelector('#attendance-table table');
-    if (!tableElement) return;
+                document.getElementById('last-updated').innerText = `Last Sync: ${new Date().toLocaleTimeString()}`;
 
-    let csvContent = "";
-    
-    // Get Headers
-    const headers = Array.from(tableElement.querySelectorAll('thead th'))
-                         .map(th => `"${th.innerText}"`).join(",");
-    csvContent += headers + "\n";
+                // Sound Logic
+                const currentPresentIds = merged.filter(s => s.status !== 'Absent').map(s => s.id);
+                if (currentPresentIds.length > previousPresentIds.length && previousPresentIds.length > 0) {
+                    scanSound.play().catch(() => {});
+                }
+                previousPresentIds = currentPresentIds;
+            }
 
-    // Get Body Rows
-    const rows = Array.from(tableElement.querySelectorAll('tbody tr')).map(tr => {
-      return Array.from(tr.querySelectorAll('td'))
-                  .map(td => `"${td.innerText}"`).join(",");
-    });
-    csvContent += rows.join("\n");
+            function renderSummary(merged) {
+                document.getElementById('total-count').innerText = merged.length;
+                document.getElementById('present-count').innerText = merged.filter(s => s.status !== 'Absent').length;
+                document.getElementById('late-count').innerText = merged.filter(s => s.status === 'Late').length;
+                document.getElementById('absent-count').innerText = merged.filter(s => s.status === 'Absent').length;
+            }
 
-    // Download Logic
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Attendance_${document.getElementById('class-select').value}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  });
+            function renderTable(data) {
+                const tbody = document.getElementById('attendance-tbody');
+                tbody.innerHTML = data.map(s => {
+                    let badgeClass = s.status === 'Present' ? 'background:#dcfce7;color:#166534' : 
+                                     s.status === 'Late' ? 'background:#fef9c3;color:#854d0e' : 'background:#fee2e2;color:#991b1b';
+                    return `
+                        <tr>
+                            <td style="font-weight:700;">${s.name}</td>
+                            <td style="font-family:monospace;color:#64748b;">${s.barcode}</td>
+                            <td><span class="badge" style="${badgeClass}">${s.status.toUpperCase()}</span></td>
+                            <td style="color:#64748b;">${s.timestamp}</td>
+                        </tr>`;
+                }).join('');
+            }
 
-});
-  </script>
+            function renderAbsentList(merged) {
+                const container = document.getElementById('absent-list-container');
+                const listDiv = document.getElementById('absent-list');
+                const absentees = merged.filter(s => s.status === 'Absent');
+                
+                if (absentees.length > 0) {
+                    container.style.display = 'block';
+                    container.style.background = '#fff1f2';
+                    container.style.borderColor = 'var(--danger)';
+                    listDiv.innerHTML = absentees.map(s => `• ${s.name}`).join('<br>');
+                } else {
+                    container.style.display = 'block';
+                    container.style.background = '#f0fdf4';
+                    container.style.borderColor = 'var(--success)';
+                    listDiv.innerHTML = '<span style="color: #166534;">🎉 Semua murid telah hadir!</span>';
+                }
+            }
+
+            async function subscribeToAttendance() {
+                if (attendanceSubscription) supabaseClient.removeSubscription(attendanceSubscription);
+                attendanceSubscription = supabaseClient
+                    .from('students_attendance')
+                    .on('INSERT', (payload) => {
+                        if (payload.new.class_name === document.getElementById('class-select').value) loadAttendance();
+                    })
+                    .subscribe((status) => {
+                        document.getElementById('status-dot').style.background = (status === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
+                    });
+            }
+
+            // Events
+            document.getElementById('class-select').addEventListener('change', () => { loadAttendance(); subscribeToAttendance(); });
+            document.getElementById('attendance-date').addEventListener('change', loadAttendance);
+            document.getElementById('sort-by').addEventListener('change', loadAttendance);
+            document.getElementById('search-input').addEventListener('input', loadAttendance);
+
+            // PDF/CSV Exports
+            document.getElementById('export-pdf').addEventListener('click', () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.text(`Laporan Kehadiran: ${document.getElementById('class-select').value}`, 14, 15);
+                doc.autoTable({ html: '#main-table', startY: 25, theme: 'grid', headStyles: {fillColor: [79, 70, 229]} });
+                doc.save(`Kehadiran_${document.getElementById('class-select').value}.pdf`);
+            });
+
+            document.getElementById('export-csv').addEventListener('click', () => {
+                let csv = "Name,Barcode,Status,Time\n";
+                document.querySelectorAll("#attendance-tbody tr").forEach(tr => {
+                    const row = Array.from(tr.querySelectorAll("td")).map(td => `"${td.innerText}"`).join(",");
+                    csv += row + "\n";
+                });
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `Kehadiran_${document.getElementById('class-select').value}.csv`; a.click();
+            });
+
+            // Init
+            document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
+            await loadClasses();
+            await loadAttendance();
+            subscribeToAttendance();
+        });
+    </script>
 </head>
 
 <body>
-  <h1>Attendance Dashboard (Students)</h1>
+    <header class="nav-header">
+        <div class="brand">
+            <img src="assets/school_logo.jpg" alt="Logo">
+            <div>
+                <h1>HadirSEKEMAS</h1>
+                <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Portal Kehadiran Murid</span>
+            </div>
+        </div>
+        <a href="https://hadirsekemas.github.io/" class="home-link">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+            UTAMA
+        </a>
+    </header>
 
-  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
-    <div id="status-dot" style="width: 10px; height: 10px; background: #ccc; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 1px #999;"></div>
-    <span style="font-size: 0.85rem; color: #64748b; font-weight: 500;">Live Connection</span>
-    <span id="last-updated" style="font-size: 0.85rem; color: #94a3b8; margin-left: auto;"></span>
-  </div>
-
-  <div class="controls">
-    <div class="control-group">
-      <label>Class Name</label>
-      <select id="class-select"></select>
-    </div>
-    
-    <div class="control-group">
-      <label>Attendance Date</label>
-      <input type="date" id="attendance-date">
-    </div>
-
-    <div class="control-group" style="flex-direction: row; align-items: flex-end; gap: 8px;">
-      <button id="export-pdf" style="padding: 10px 16px;">Print PDF Report</button>
-      <button id="export-csv" style="padding: 10px 16px;">Export CSV</button>
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; padding-left: 5px;">
+        <div id="status-dot" style="width: 10px; height: 10px; background: #ccc; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 1px #e2e8f0;"></div>
+        <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Live Updates Active</span>
+        <span id="last-updated" style="font-size: 0.75rem; color: #94a3b8; margin-left: auto; font-style: italic;"></span>
     </div>
 
-    <div style="margin-left: auto; text-align: right;">
-      <p id="today-date" style="margin: 0; font-weight: 700; color: var(--primary); font-size: 1.1rem;"></p>
+    <div class="controls">
+        <div class="control-group">
+            <label>Pilih Kelas</label>
+            <select id="class-select"></select>
+        </div>
+        
+        <div class="control-group">
+            <label>Tarikh Semakan</label>
+            <input type="date" id="attendance-date">
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <button id="export-pdf" class="btn btn-primary">Print PDF</button>
+            <button id="export-csv" class="btn btn-secondary">CSV</button>
+        </div>
     </div>
-  </div>
 
-  <div id="summary">
-    <div class="stat-card card-total"><h3>Total</h3><p id="total-count">0</p></div>
-    <div class="stat-card card-present"><h3>Present</h3><p id="present-count">0</p></div>
-    <div class="stat-card card-late"><h3>Late</h3><p id="late-count">0</p></div>
-    <div class="stat-card card-absent"><h3>Absent</h3><p id="absent-count">0</p></div>
-  </div>
-
-  <div id="absent-list-container" style="display: none; background: #fff1f2; border-left: 4px solid var(--danger); padding: 20px; border-radius: 12px; margin-bottom: 25px;">
-    <h3 style="color: #991b1b; margin: 0 0 10px 0; font-size: 1rem;">Students Not Yet Present:</h3>
-    <div id="absent-list" style="color: #b91c1c; font-weight: 500; font-size: 0.95rem; line-height: 1.6;"></div>
-  </div>
-
-  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; padding: 0 5px;">
-    <h2 style="margin: 0; font-size: 1.25rem; color: #1e293b;">Student List</h2>
-    
-    <div style="display: flex; gap: 15px;">
-      <div class="control-group">
-        <label style="font-size: 0.75rem; color: #64748b; font-weight: 600;">SORT BY</label>
-        <select id="sort-by" style="padding: 6px 10px; font-size: 0.85rem;">
-          <option value="name">Name (A-Z)</option>
-          <option value="barcode">Barcode</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <label style="font-size: 0.75rem; color: #64748b; font-weight: 600;">SEARCH</label>
-        <input type="text" id="search-input" placeholder="Find student..." style="padding: 6px 10px; font-size: 0.85rem; width: 200px; border: 1px solid #e2e8f0; border-radius: 8px;">
-      </div>
+    <div id="summary">
+        <div class="stat-card card-total"><h3>Total</h3><p id="total-count">0</p></div>
+        <div class="stat-card card-present"><h3>Hadir</h3><p id="present-count">0</p></div>
+        <div class="stat-card card-late"><h3>Lewat</h3><p id="late-count">0</p></div>
+        <div class="stat-card card-absent"><h3>Tiada</h3><p id="absent-count">0</p></div>
     </div>
-  </div>
 
-  <div id="attendance-table"></div>
+    <div id="absent-list-container" style="display: none; padding: 20px; border-radius: 16px; margin-bottom: 25px; border-left: 6px solid var(--danger);">
+        <h3 style="margin: 0 0 8px 0; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; color: #1e293b;">Belum Imbas Kehadiran:</h3>
+        <div id="absent-list" style="font-size: 0.95rem; line-height: 1.6; font-weight: 500;"></div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;">
+        <h2 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: #334155;">Senarai Nama Murid</h2>
+        
+        <div style="display: flex; gap: 12px;">
+            <div class="control-group" style="min-width: 120px;">
+                <select id="sort-by" style="padding: 6px 10px; font-size: 0.8rem;">
+                    <option value="name">Nama (A-Z)</option>
+                    <option value="barcode">ID Barcode</option>
+                </select>
+            </div>
+            <div class="control-group" style="min-width: 150px;">
+                <input type="text" id="search-input" placeholder="Cari nama..." style="padding: 6px 10px; font-size: 0.8rem;">
+            </div>
+        </div>
+    </div>
+
+    <div id="attendance-table">
+        <table id="main-table">
+            <thead>
+                <tr>
+                    <th>Nama Murid</th>
+                    <th>Barcode</th>
+                    <th>Status</th>
+                    <th>Waktu Masuk</th>
+                </tr>
+            </thead>
+            <tbody id="attendance-tbody"></tbody>
+        </table>
+    </div>
 
 </body>
 </html>
