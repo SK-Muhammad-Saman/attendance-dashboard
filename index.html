@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HadirSEKEMAS | Portal Pemantauan Murid</title>
     
-    <script defer src="https://unpkg.com/@supabase/supabase-js@1.35.6/dist/umd/supabase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
@@ -257,12 +257,29 @@
             }
 
             function subscribeRealtime() {
-                if (attendanceSubscription) supabaseClient.removeSubscription(attendanceSubscription);
-                attendanceSubscription = supabaseClient.from('students_attendance').on('INSERT', (p) => {
-                    if (p.new.class_name === document.getElementById('class-select').value) loadAttendance();
-                }).subscribe((s) => {
-                    document.getElementById('status-dot').style.background = (s === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
-                });
+                // 1. Clean up old subscription
+                if (attendanceSubscription) {
+                    attendanceSubscription.unsubscribe();
+                }
+
+                const selectedClass = document.getElementById('class-select').value;
+
+                // 2. Create new subscription
+                attendanceSubscription = supabaseClient
+                    .channel('public:students_attendance')
+                    .on('postgres_changes', { 
+                        event: 'INSERT', 
+                        schema: 'public', 
+                        table: 'students_attendance',
+                        filter: `class_name=eq.${selectedClass}` 
+                    }, (payload) => {
+                        console.log('New scan detected!', payload);
+                        loadAttendance();
+                    })
+                    .subscribe((status) => {
+                        const dot = document.getElementById('status-dot');
+                        if (dot) dot.style.background = (status === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
+                    });
             }
 
             document.getElementById('export-pdf').onclick = () => {
