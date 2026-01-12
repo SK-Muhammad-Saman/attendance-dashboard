@@ -103,7 +103,7 @@
         .card-late { border-color: var(--warning); color: var(--warning); }
         .card-absent { border-color: var(--danger); color: var(--danger); }
 
-        /* Modified Absent Grid - Set to Max 4 Columns */
+        /* Absent Grid */
         #absent-list-container {
             background: #fff;
             padding: 20px;
@@ -115,7 +115,6 @@
 
         #absent-grid {
             display: grid;
-            /* 4 column grid on large screens, adjusted on mobile */
             grid-template-columns: repeat(4, 1fr); 
             gap: 12px;
             margin-top: 12px;
@@ -129,12 +128,11 @@
             border-radius: 8px;
             border: 1px solid #fecaca;
             font-weight: 600;
-            /* Allow text to breathe */
             white-space: normal; 
             line-height: 1.3;
         }
 
-        /* Responsive Table */
+        /* Table */
         .table-responsive {
             background: white;
             border-radius: 12px;
@@ -159,10 +157,7 @@
         .btn-pdf { background: #1e293b; color: white; }
         .btn-csv { background: #f1f5f9; color: #1e293b; border: 1px solid #e2e8f0; }
 
-        /* Phone & Tablet Adjustment */
-        @media (max-width: 900px) {
-            #absent-grid { grid-template-columns: repeat(2, 1fr); }
-        }
+        @media (max-width: 900px) { #absent-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 600px) {
             .nav-header { flex-direction: column; gap: 15px; }
             #summary { grid-template-columns: 1fr 1fr; }
@@ -170,151 +165,6 @@
             .controls { flex-direction: column; align-items: stretch; }
         }
     </style>
-
-    <script defer>
-        document.addEventListener('DOMContentLoaded', async () => {
-            const supabaseUrl = 'https://cawrvnutflgvbrisuqtd.supabase.co';
-            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
-            const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
-
-            let attendanceSubscription = null;
-            let lastAttendanceId = null;
-            const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-
-            async function loadClasses() {
-                const { data } = await supabaseClient.from('students').select('class_name_full');
-                if (!data) return;
-                const uniqueClasses = [...new Set(data.map(c => c.class_name_full))].sort();
-                document.getElementById('class-select').innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
-            }
-
-            async function loadAttendance() {
-                const selectedClass = document.getElementById('class-select').value;
-                const selectedDate = document.getElementById('attendance-date').value;
-                const sortBy = document.getElementById('sort-by').value;
-                const searchQuery = document.getElementById('search-input').value.toLowerCase();
-                
-                if (!selectedClass) return;
-
-                const [{ data: students }, { data: attendance }] = await Promise.all([
-                    supabaseClient.from('students').select('*').eq('class_name_full', selectedClass),
-                    supabaseClient.from('students_attendance').select('*').eq('class_name', selectedClass).eq('date', selectedDate)
-                ]);
-
-                let merged = students.map(s => {
-                    const att = attendance.find(a => String(a.student_id) === String(s.id));
-                    let status = 'TIADA', timestamp = '—', attId = null;
-                    if (att) {
-                        attId = att.id;
-                        timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,8) : att.timestamp.split(' ')[1];
-                        const [h, m] = timestamp.split(':').map(Number);
-                        status = (h > 8 || (h === 8 && m > 0)) ? 'LEWAT' : 'HADIR';
-                    }
-                    return { ...s, status, timestamp, attId };
-                });
-
-                merged.sort((a, b) => sortBy === 'name' ? a.name.localeCompare(b.name) : a.barcode.localeCompare(b.barcode));
-                const filtered = merged.filter(s => s.name.toLowerCase().includes(searchQuery) || s.barcode.includes(searchQuery));
-
-                const latestRecord = attendance.sort((a,b) => b.id - a.id)[0];
-                if (latestRecord && latestRecord.id !== lastAttendanceId) {
-                    if (lastAttendanceId !== null) scanSound.play().catch(() => {});
-                    lastAttendanceId = latestRecord.id;
-                }
-
-                renderDashboard(merged, filtered, latestRecord?.id);
-                document.getElementById('last-updated').innerText = `Sync: ${new Date().toLocaleTimeString()}`;
-            }
-
-            function renderDashboard(fullData, filteredData, highlightId) {
-                document.getElementById('total-count').innerText = fullData.length;
-                document.getElementById('present-count').innerText = fullData.filter(s => s.status !== 'TIADA').length;
-                document.getElementById('late-count').innerText = fullData.filter(s => s.status === 'LEWAT').length;
-                document.getElementById('absent-count').innerText = fullData.filter(s => s.status === 'TIADA').length;
-
-                // Absent Grid
-                const absentees = fullData.filter(s => s.status === 'TIADA');
-                const grid = document.getElementById('absent-grid');
-                if (absentees.length === 0) {
-                    grid.innerHTML = '<p style="color:var(--success); font-weight:700;">🎉 Semua murid kelas ini telah hadir!</p>';
-                } else {
-                    grid.innerHTML = absentees.map(s => `<div class="absent-item">👤 ${s.name}</div>`).join('');
-                }
-
-                const tbody = document.getElementById('attendance-tbody');
-                tbody.innerHTML = filteredData.map(s => {
-                    const isNew = s.attId === highlightId ? 'new-scan-row' : '';
-                    let badgeStyle = s.status === 'HADIR' ? 'background:#dcfce7;color:#166534' : 
-                                     s.status === 'LEWAT' ? 'background:#fef9c3;color:#854d0e' : 'background:#fee2e2;color:#991b1b';
-                    
-                    return `<tr class="${isNew}">
-                        <td style="font-weight:700;">${s.name}</td>
-                        <td style="color:#64748b; font-family:monospace; font-size:0.8rem;">${s.barcode}</td>
-                        <td><span class="badge" style="${badgeStyle}">${s.status}</span></td>
-                        <td style="color:#64748b;">${s.timestamp}</td>
-                    </tr>`;
-                }).join('');
-            }
-
-            function subscribeRealtime() {
-                // 1. Clean up old subscription
-                if (attendanceSubscription) {
-                    attendanceSubscription.unsubscribe();
-                }
-
-                const selectedClass = document.getElementById('class-select').value;
-
-                // 2. Create new subscription
-                attendanceSubscription = supabaseClient
-                    .channel('public:students_attendance')
-                    .on('postgres_changes', { 
-                        event: 'INSERT', 
-                        schema: 'public', 
-                        table: 'students_attendance',
-                        filter: `class_name=eq.${selectedClass}` 
-                    }, (payload) => {
-                        console.log('New scan detected!', payload);
-                        loadAttendance();
-                    })
-                    .subscribe((status) => {
-                        const dot = document.getElementById('status-dot');
-                        if (dot) dot.style.background = (status === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
-                    });
-            }
-
-            document.getElementById('export-pdf').onclick = () => {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF();
-                const cls = document.getElementById('class-select').value;
-                doc.text(`Laporan Kehadiran: ${cls}`, 14, 15);
-                doc.autoTable({ html: '#main-table', startY: 25, headStyles: {fillColor: [79, 70, 229]} });
-                doc.save(`Kehadiran_${cls}.pdf`);
-            };
-
-            document.getElementById('export-csv').onclick = () => {
-                const cls = document.getElementById('class-select').value;
-                let csv = "Nama Murid,Barcode,Status,Waktu\n";
-                document.querySelectorAll("#attendance-tbody tr").forEach(tr => {
-                    const row = Array.from(tr.querySelectorAll("td")).map(td => `"${td.innerText}"`).join(",");
-                    csv += row + "\n";
-                });
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url; a.download = `Kehadiran_${cls}.csv`; a.click();
-            };
-
-            document.getElementById('class-select').onchange = () => { loadAttendance(); subscribeRealtime(); };
-            document.getElementById('attendance-date').onchange = loadAttendance;
-            document.getElementById('sort-by').onchange = loadAttendance;
-            document.getElementById('search-input').oninput = loadAttendance;
-
-            document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
-            await loadClasses();
-            await loadAttendance();
-            subscribeRealtime();
-        });
-    </script>
 </head>
 <body>
 
@@ -390,5 +240,140 @@
         </table>
     </div>
 
+    <script>
+        // 1. Immediate Configuration (Teacher Style)
+        const SB_URL = 'https://cawrvnutflgvbrisuqtd.supabase.co';
+        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
+        const _supabase = supabase.createClient(SB_URL, SB_KEY);
+
+        let lastAttendanceId = null;
+        const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+
+        async function loadClasses() {
+            const { data } = await _supabase.from('students').select('class_name_full');
+            if (!data) return;
+            const uniqueClasses = [...new Set(data.map(c => c.class_name_full))].sort();
+            document.getElementById('class-select').innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        async function loadAttendance() {
+            const selectedClass = document.getElementById('class-select').value;
+            const selectedDate = document.getElementById('attendance-date').value;
+            const sortBy = document.getElementById('sort-by').value;
+            const searchQuery = document.getElementById('search-input').value.toLowerCase();
+            
+            if (!selectedClass) return;
+
+            const [{ data: students }, { data: attendance }] = await Promise.all([
+                _supabase.from('students').select('*').eq('class_name_full', selectedClass),
+                _supabase.from('students_attendance').select('*').eq('class_name', selectedClass).eq('date', selectedDate)
+            ]);
+
+            let merged = (students || []).map(s => {
+                const att = (attendance || []).find(a => String(a.student_id) === String(s.id));
+                let status = 'TIADA', timestamp = '—', attId = null;
+                if (att) {
+                    attId = att.id;
+                    timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,5) : att.timestamp.split(' ')[1].substring(0,5);
+                    const [h, m] = timestamp.split(':').map(Number);
+                    status = (h > 8 || (h === 8 && m > 0)) ? 'LEWAT' : 'HADIR';
+                }
+                return { ...s, status, timestamp, attId };
+            });
+
+            // Handle Audio Playback for new scans
+            const latestRecord = [...(attendance || [])].sort((a,b) => b.id - a.id)[0];
+            if (latestRecord && latestRecord.id !== lastAttendanceId) {
+                if (lastAttendanceId !== null) scanSound.play().catch(() => {});
+                lastAttendanceId = latestRecord.id;
+            }
+
+            merged.sort((a, b) => sortBy === 'name' ? a.name.localeCompare(b.name) : a.barcode.localeCompare(b.barcode));
+            const filtered = merged.filter(s => s.name.toLowerCase().includes(searchQuery) || s.barcode.includes(searchQuery));
+
+            renderDashboard(merged, filtered, latestRecord?.id);
+            document.getElementById('last-updated').innerText = `Sync: ${new Date().toLocaleTimeString()}`;
+        }
+
+        function renderDashboard(fullData, filteredData, highlightId) {
+            document.getElementById('total-count').innerText = fullData.length;
+            document.getElementById('present-count').innerText = fullData.filter(s => s.status !== 'TIADA').length;
+            document.getElementById('late-count').innerText = fullData.filter(s => s.status === 'LEWAT').length;
+            document.getElementById('absent-count').innerText = fullData.filter(s => s.status === 'TIADA').length;
+
+            const absentees = fullData.filter(s => s.status === 'TIADA');
+            const grid = document.getElementById('absent-grid');
+            grid.innerHTML = absentees.length === 0 ? 
+                '<p style="color:var(--success); font-weight:700;">🎉 Semua murid kelas ini telah hadir!</p>' : 
+                absentees.map(s => `<div class="absent-item">👤 ${s.name}</div>`).join('');
+
+            const tbody = document.getElementById('attendance-tbody');
+            tbody.innerHTML = filteredData.map(s => {
+                const isNew = s.attId === highlightId ? 'new-scan-row' : '';
+                const badgeStyle = s.status === 'HADIR' ? 'background:#dcfce7;color:#166534' : 
+                                   s.status === 'LEWAT' ? 'background:#fef9c3;color:#854d0e' : 'background:#fee2e2;color:#991b1b';
+                
+                return `<tr class="${isNew}">
+                    <td style="font-weight:700;">${s.name}</td>
+                    <td style="color:#64748b; font-family:monospace; font-size:0.8rem;">${s.barcode}</td>
+                    <td><span class="badge" style="${badgeStyle}">${s.status}</span></td>
+                    <td style="color:#64748b;">${s.timestamp}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // 2. Optimized Realtime (Teacher Style - Reliable)
+        function startRealtime() {
+            _supabase
+                .channel('student_updates')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'students_attendance' }, (payload) => {
+                    const currentClass = document.getElementById('class-select').value;
+                    // Logic check instead of complex DB filter for better browser stability
+                    if (payload.new.class_name === currentClass) {
+                        loadAttendance();
+                    }
+                })
+                .subscribe((status) => {
+                    const dot = document.getElementById('status-dot');
+                    if (dot) dot.style.background = (status === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
+                });
+        }
+
+        // Event Listeners
+        document.getElementById('export-pdf').onclick = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const cls = document.getElementById('class-select').value;
+            doc.text(`Laporan Kehadiran: ${cls}`, 14, 15);
+            doc.autoTable({ html: '#main-table', startY: 25, headStyles: {fillColor: [79, 70, 229]} });
+            doc.save(`Kehadiran_${cls}.pdf`);
+        };
+
+        document.getElementById('export-csv').onclick = () => {
+            const cls = document.getElementById('class-select').value;
+            let csv = "Nama Murid,Barcode,Status,Waktu\n";
+            document.querySelectorAll("#attendance-tbody tr").forEach(tr => {
+                const row = Array.from(tr.querySelectorAll("td")).map(td => `"${td.innerText}"`).join(",");
+                csv += row + "\n";
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = `Kehadiran_${cls}.csv`; a.click();
+        };
+
+        document.getElementById('class-select').onchange = loadAttendance;
+        document.getElementById('attendance-date').onchange = loadAttendance;
+        document.getElementById('sort-by').onchange = loadAttendance;
+        document.getElementById('search-input').oninput = loadAttendance;
+
+        // Initialize
+        window.onload = async () => {
+            document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
+            await loadClasses();
+            await loadAttendance();
+            startRealtime();
+        };
+    </script>
 </body>
 </html>
