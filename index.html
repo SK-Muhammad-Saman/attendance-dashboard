@@ -55,7 +55,7 @@
         .link-secondary { color: #64748b; border: 1px solid #e2e8f0; }
         .link-primary { background: #1e293b; color: white; border: 1px solid #1e293b; }
 
-        /* Summary Stats - Clickable */
+        /* Summary Stats */
         #summary {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -150,7 +150,7 @@
     <div class="controls">
         <div class="control-group">
             <label>Pilih Kelas</label>
-            <select id="class-select"></select>
+            <select id="class-select"><option>Memuatkan kelas...</option></select>
         </div>
         <div class="control-group">
             <label>Tarikh Semakan</label>
@@ -170,17 +170,17 @@
         <div class="stat-card card-present" onclick="openModal('HADIR')">
             <h3>Hadir</h3>
             <p id="present-count">0</p>
-            <small>Klik untuk senarai</small>
+            <small>Klik untuk senarai nama</small>
         </div>
         <div class="stat-card card-late" onclick="openModal('LEWAT')">
             <h3>Lewat</h3>
             <p id="late-count">0</p>
-            <small>Klik untuk senarai</small>
+            <small>Klik untuk senarai nama</small>
         </div>
         <div class="stat-card card-absent" onclick="openModal('TIADA')">
             <h3>Tidak Hadir/Imbas</h3>
             <p id="absent-count">0</p>
-            <small>Klik untuk senarai</small>
+            <small>Klik untuk senarai nama</small>
         </div>
     </div>
 
@@ -227,10 +227,12 @@
         const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
         async function loadClasses() {
-            const { data } = await _supabase.from('students').select('class_name_full');
-            if (!data) return;
+            const { data, error } = await _supabase.from('students').select('class_name_full');
+            if (error || !data || data.length === 0) return false;
+            
             const uniqueClasses = [...new Set(data.map(c => c.class_name_full))].sort();
             document.getElementById('class-select').innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
+            return true;
         }
 
         async function loadAttendance() {
@@ -239,39 +241,47 @@
             const sortBy = document.getElementById('sort-by').value;
             const searchQuery = document.getElementById('search-input').value.toLowerCase();
             
-            if (!selectedClass) return;
+            // Safety check for mobile: don't proceed if classes aren't loaded yet
+            if (!selectedClass || selectedClass === "Memuatkan kelas...") return;
 
-            const [{ data: students }, { data: attendance }] = await Promise.all([
-                _supabase.from('students').select('*').eq('class_name_full', selectedClass),
-                _supabase.from('students_attendance').select('*').eq('class_name', selectedClass).eq('date', selectedDate)
-            ]);
+            // Show loading state in table
+            const tbody = document.getElementById('attendance-tbody');
+            if (globalMergedData.length === 0) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8;">Memuatkan data...</td></tr>';
 
-            let merged = (students || []).map(s => {
-                const att = (attendance || []).find(a => String(a.student_id) === String(s.id));
-                let status = 'TIADA', timestamp = '—', attId = null;
-                if (att) {
-                    attId = att.id;
-                    timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,5) : att.timestamp.split(' ')[1].substring(0,5);
-                    const [h, m] = timestamp.split(':').map(Number);
-                    // LOGIK: 7:31 PAGI DAN KE ATAS ADALAH LEWAT
-                    status = (h > 7 || (h === 7 && m > 30)) ? 'LEWAT' : 'HADIR';
+            try {
+                const [{ data: students }, { data: attendance }] = await Promise.all([
+                    _supabase.from('students').select('*').eq('class_name_full', selectedClass),
+                    _supabase.from('students_attendance').select('*').eq('class_name', selectedClass).eq('date', selectedDate)
+                ]);
+
+                let merged = (students || []).map(s => {
+                    const att = (attendance || []).find(a => String(a.student_id) === String(s.id));
+                    let status = 'TIADA', timestamp = '—', attId = null;
+                    if (att) {
+                        attId = att.id;
+                        timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,5) : att.timestamp.split(' ')[1].substring(0,5);
+                        const [h, m] = timestamp.split(':').map(Number);
+                        status = (h > 7 || (h === 7 && m > 30)) ? 'LEWAT' : 'HADIR';
+                    }
+                    return { ...s, status, timestamp, attId };
+                });
+
+                globalMergedData = merged;
+
+                const latestRecord = [...(attendance || [])].sort((a,b) => b.id - a.id)[0];
+                if (latestRecord && latestRecord.id !== lastAttendanceId) {
+                    if (lastAttendanceId !== null) scanSound.play().catch(() => {});
+                    lastAttendanceId = latestRecord.id;
                 }
-                return { ...s, status, timestamp, attId };
-            });
 
-            globalMergedData = merged;
+                merged.sort((a, b) => sortBy === 'name' ? a.name.localeCompare(b.name) : a.barcode.localeCompare(b.barcode));
+                const filtered = merged.filter(s => s.name.toLowerCase().includes(searchQuery) || s.barcode.includes(searchQuery));
 
-            const latestRecord = [...(attendance || [])].sort((a,b) => b.id - a.id)[0];
-            if (latestRecord && latestRecord.id !== lastAttendanceId) {
-                if (lastAttendanceId !== null) scanSound.play().catch(() => {});
-                lastAttendanceId = latestRecord.id;
+                renderDashboard(merged, filtered, latestRecord?.id);
+                document.getElementById('last-updated').innerText = `Sync: ${new Date().toLocaleTimeString()}`;
+            } catch (err) {
+                console.error("Error loading attendance:", err);
             }
-
-            merged.sort((a, b) => sortBy === 'name' ? a.name.localeCompare(b.name) : a.barcode.localeCompare(b.barcode));
-            const filtered = merged.filter(s => s.name.toLowerCase().includes(searchQuery) || s.barcode.includes(searchQuery));
-
-            renderDashboard(merged, filtered, latestRecord?.id);
-            document.getElementById('last-updated').innerText = `Sync: ${new Date().toLocaleTimeString()}`;
         }
 
         function renderDashboard(fullData, filteredData, highlightId) {
@@ -281,6 +291,11 @@
             document.getElementById('absent-count').innerText = fullData.filter(s => s.status === 'TIADA').length;
 
             const tbody = document.getElementById('attendance-tbody');
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8;">Tiada rekod ditemukan.</td></tr>';
+                return;
+            }
+
             tbody.innerHTML = filteredData.map(s => {
                 const isNew = s.attId === highlightId ? 'new-scan-row' : '';
                 const badgeStyle = s.status === 'HADIR' ? 'background:#dcfce7;color:#166534' : 
@@ -336,7 +351,10 @@
             const cls = document.getElementById('class-select').value;
             let csv = "Nama Murid,Barcode,Status,Waktu\n";
             document.querySelectorAll("#attendance-tbody tr").forEach(tr => {
-                csv += Array.from(tr.querySelectorAll("td")).map(td => `"${td.innerText}"`).join(",") + "\n";
+                const cells = tr.querySelectorAll("td");
+                if (cells.length >= 4) {
+                    csv += Array.from(cells).map(td => `"${td.innerText}"`).join(",") + "\n";
+                }
             });
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
@@ -349,10 +367,20 @@
         document.getElementById('sort-by').onchange = loadAttendance;
         document.getElementById('search-input').oninput = loadAttendance;
 
+        // FIXED INITIALIZATION FOR MOBILE
         window.onload = async () => {
+            // 1. Set default date
             document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
-            await loadClasses();
-            await loadAttendance();
+            
+            // 2. Wait for classes to load first
+            const success = await loadClasses();
+            
+            // 3. Only then load attendance
+            if (success) {
+                await loadAttendance();
+            }
+            
+            // 4. Start real-time last
             startRealtime();
         };
     </script>
