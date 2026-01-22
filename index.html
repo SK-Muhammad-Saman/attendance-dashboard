@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HadirSEKEMAS | Portal Pemantauan Murid</title>
+    <title>HadirSEKEMAS Murid | Portal Pemantauan Kehadiran Murid</title>
     
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -38,130 +38,89 @@
             padding: 15px 20px;
             border-radius: 12px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .brand { display: flex; align-items: center; gap: 12px; }
         .brand img { width: 45px; height: 45px; border-radius: 10px; object-fit: cover; }
         .brand h1 { margin: 0; font-size: 1.1rem; font-weight: 800; }
 
-        .home-link {
-            text-decoration: none;
-            color: #64748b;
-            font-size: 0.75rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 14px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
+        .nav-buttons { display: flex; gap: 10px; }
+        .nav-link {
+            text-decoration: none; font-size: 0.75rem; font-weight: 700;
+            display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+            border-radius: 8px; transition: 0.2s;
         }
+        .link-secondary { color: #64748b; border: 1px solid #e2e8f0; }
+        .link-primary { background: #1e293b; color: white; border: 1px solid #1e293b; }
 
-        /* Controls */
-        .controls {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            align-items: flex-end;
-        }
-
-        .control-group { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 5px; }
-        .control-group label { font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
-        
-        select, input {
-            padding: 10px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
-
-        /* Summary Stats */
+        /* Summary Stats - Clickable */
         #summary {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
             gap: 12px;
             margin-bottom: 20px;
         }
-
         .stat-card {
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            border-bottom: 4px solid #cbd5e1;
+            background: white; padding: 15px; border-radius: 12px; text-align: center;
+            border-bottom: 4px solid #cbd5e1; cursor: pointer; transition: 0.2s;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .stat-card h3 { margin: 0; font-size: 0.7rem; color: #64748b; text-transform: uppercase; }
         .stat-card p { margin: 5px 0 0; font-size: 1.6rem; font-weight: 800; }
+        .stat-card small { font-size: 0.55rem; font-weight: 700; opacity: 0.7; margin-top: 5px; text-transform: uppercase; }
         
-        .card-total { border-color: var(--primary); color: var(--primary); }
+        .card-total { border-color: var(--primary); color: var(--primary); cursor: default; }
         .card-present { border-color: var(--success); color: var(--success); }
         .card-late { border-color: var(--warning); color: var(--warning); }
         .card-absent { border-color: var(--danger); color: var(--danger); }
 
-        /* Absent Grid */
-        #absent-list-container {
-            background: #fff;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            border-left: 6px solid var(--danger);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        /* Modal Styles */
+        .modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px);
+            align-items: center; justify-content: center;
         }
+        .modal-content {
+            background: white; padding: 25px; border-radius: 16px; width: 90%; max-width: 500px;
+            max-height: 80vh; overflow-y: auto; position: relative;
+        }
+        .close-modal { float: right; font-size: 24px; cursor: pointer; color: #64748b; font-weight: bold; }
+        .modal-item { padding: 10px; border-bottom: 1px solid #f1f5f9; font-weight: 600; font-size: 0.9rem; }
 
-        #absent-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr); 
-            gap: 12px;
-            margin-top: 12px;
+        /* Controls */
+        .controls {
+            background: white; padding: 20px; border-radius: 12px; display: flex;
+            flex-wrap: wrap; gap: 15px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            align-items: flex-end;
         }
-
-        .absent-item {
-            font-size: 0.8rem;
-            color: #475569;
-            padding: 10px 12px;
-            background: #fff1f2;
-            border-radius: 8px;
-            border: 1px solid #fecaca;
-            font-weight: 600;
-            white-space: normal; 
-            line-height: 1.3;
-        }
+        .control-group { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 5px; }
+        .control-group label { font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+        select, input { padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; }
 
         /* Table */
         .table-responsive {
-            background: white;
-            border-radius: 12px;
-            overflow-x: auto;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            margin-top: 10px;
+            background: white; border-radius: 12px; overflow-x: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-top: 10px;
         }
-
         table { width: 100%; border-collapse: collapse; min-width: 600px; }
         th { background: #f8fafc; padding: 12px 15px; text-align: left; font-size: 0.7rem; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
         td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
-
         .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.65rem; font-weight: 800; }
 
         .new-scan-row { animation: highlightFade 3s ease-out; }
-        @keyframes highlightFade {
-            0% { background-color: #fef9c3; }
-            100% { background-color: transparent; }
-        }
+        @keyframes highlightFade { 0% { background-color: #fef9c3; } 100% { background-color: transparent; } }
 
         .btn { padding: 10px 16px; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
         .btn-pdf { background: #1e293b; color: white; }
         .btn-csv { background: #f1f5f9; color: #1e293b; border: 1px solid #e2e8f0; }
 
-        @media (max-width: 900px) { #absent-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 600px) {
-            .nav-header { flex-direction: column; gap: 15px; }
+            .nav-header { flex-direction: column; align-items: flex-start; }
+            .nav-buttons { width: 100%; justify-content: space-between; }
             #summary { grid-template-columns: 1fr 1fr; }
-            #absent-grid { grid-template-columns: 1fr; }
             .controls { flex-direction: column; align-items: stretch; }
         }
     </style>
@@ -172,19 +131,19 @@
         <div class="brand">
             <img src="assets/school_logo.jpg" alt="Logo">
             <div>
-                <h1>HadirSEKEMAS</h1>
-                <p style="margin:0; font-size:0.65rem; color:#94a3b8; font-weight:700; text-transform:uppercase;">Portal Kehadiran Murid</p>
+                <h1>HadirSEKEMAS Murid</h1>
+                <p style="margin:0; font-size:0.65rem; color:#94a3b8; font-weight:700; text-transform:uppercase;">Portal Pemantauan Kehadiran Murid</p>
             </div>
         </div>
-        <a href="https://hadirsekemas.github.io/" class="home-link">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-            Guru dan AKP
-        </a>
+        <div class="nav-buttons">
+            <a href="https://hadirsekemasimbas.vercel.app/" class="nav-link link-primary">📷 Imbas Murid</a>
+            <a href="https://hadirsekemas.github.io/" class="nav-link link-secondary">Guru dan AKP</a>
+        </div>
     </header>
 
     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 0 5px;">
         <div id="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #ccc; border: 2px solid white;"></div>
-        <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">LIVE UPDATES</span>
+        <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">KEMASKINI LIVE</span>
         <span id="last-updated" style="font-size: 0.7rem; color: #94a3b8; margin-left: auto; font-style: italic;"></span>
     </div>
 
@@ -204,19 +163,37 @@
     </div>
 
     <div id="summary">
-        <div class="stat-card card-total"><h3>Jumlah Pelajar</h3><p id="total-count">0</p></div>
-        <div class="stat-card card-present"><h3>Hadir</h3><p id="present-count">0</p></div>
-        <div class="stat-card card-late"><h3>Lewat</h3><p id="late-count">0</p></div>
-        <div class="stat-card card-absent"><h3>Tidak Hadir/Imbas</h3><p id="absent-count">0</p></div>
+        <div class="stat-card card-total">
+            <h3>Jumlah Murid</h3>
+            <p id="total-count">0</p>
+        </div>
+        <div class="stat-card card-present" onclick="openModal('HADIR')">
+            <h3>Hadir</h3>
+            <p id="present-count">0</p>
+            <small>Klik untuk senarai</small>
+        </div>
+        <div class="stat-card card-late" onclick="openModal('LEWAT')">
+            <h3>Lewat</h3>
+            <p id="late-count">0</p>
+            <small>Klik untuk senarai</small>
+        </div>
+        <div class="stat-card card-absent" onclick="openModal('TIADA')">
+            <h3>Tidak Hadir/Imbas</h3>
+            <p id="absent-count">0</p>
+            <small>Klik untuk senarai</small>
+        </div>
     </div>
 
-    <div id="absent-list-container">
-        <h3 style="margin:0; font-size:0.75rem; color:var(--danger); font-weight:800; text-transform:uppercase;">Murid Belum Imbas Kehadiran:</h3>
-        <div id="absent-grid"></div>
+    <div id="nameModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle" style="margin-top:0; font-size:1.1rem; border-bottom:2px solid #f1f5f9; padding-bottom:10px;">Senarai Murid</h2>
+            <div id="modalList"></div>
+        </div>
     </div>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin: 25px 0 10px 0; padding: 0 5px; flex-wrap: wrap; gap: 10px;">
-        <h2 style="margin: 0; font-size: 1rem; font-weight: 800; color: #334155;">Senarai Kehadiran</h2>
+        <h2 style="margin: 0; font-size: 1rem; font-weight: 800; color: #334155;">Rekod Kehadiran</h2>
         <div style="display: flex; gap: 8px;">
             <select id="sort-by" style="padding: 6px 10px; font-size: 0.75rem; border-radius: 8px;">
                 <option value="name">Susun: Nama</option>
@@ -241,18 +218,12 @@
     </div>
 
     <script>
-        // 1. Immediate Configuration (Teacher Style)
         const SB_URL = 'https://cawrvnutflgvbrisuqtd.supabase.co';
         const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
-        const _supabase = supabase.createClient(SB_URL, SB_KEY, {
-            auth: {
-                persistSession: false,
-                autoRefreshToken: false,
-                detectSessionInUrl: false
-            }
-        });
+        const _supabase = supabase.createClient(SB_URL, SB_KEY);
 
         let lastAttendanceId = null;
+        let globalMergedData = []; 
         const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
         async function loadClasses() {
@@ -282,12 +253,14 @@
                     attId = att.id;
                     timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,5) : att.timestamp.split(' ')[1].substring(0,5);
                     const [h, m] = timestamp.split(':').map(Number);
-                    status = (h > 8 || (h === 8 && m > 0)) ? 'LEWAT' : 'HADIR';
+                    // LOGIK: 7:31 PAGI DAN KE ATAS ADALAH LEWAT
+                    status = (h > 7 || (h === 7 && m > 30)) ? 'LEWAT' : 'HADIR';
                 }
                 return { ...s, status, timestamp, attId };
             });
 
-            // Handle Audio Playback for new scans
+            globalMergedData = merged;
+
             const latestRecord = [...(attendance || [])].sort((a,b) => b.id - a.id)[0];
             if (latestRecord && latestRecord.id !== lastAttendanceId) {
                 if (lastAttendanceId !== null) scanSound.play().catch(() => {});
@@ -303,15 +276,9 @@
 
         function renderDashboard(fullData, filteredData, highlightId) {
             document.getElementById('total-count').innerText = fullData.length;
-            document.getElementById('present-count').innerText = fullData.filter(s => s.status !== 'TIADA').length;
+            document.getElementById('present-count').innerText = fullData.filter(s => s.status === 'HADIR').length;
             document.getElementById('late-count').innerText = fullData.filter(s => s.status === 'LEWAT').length;
             document.getElementById('absent-count').innerText = fullData.filter(s => s.status === 'TIADA').length;
-
-            const absentees = fullData.filter(s => s.status === 'TIADA');
-            const grid = document.getElementById('absent-grid');
-            grid.innerHTML = absentees.length === 0 ? 
-                '<p style="color:var(--success); font-weight:700;">🎉 Semua murid kelas ini telah hadir!</p>' : 
-                absentees.map(s => `<div class="absent-item">👤 ${s.name}</div>`).join('');
 
             const tbody = document.getElementById('attendance-tbody');
             tbody.innerHTML = filteredData.map(s => {
@@ -328,44 +295,53 @@
             }).join('');
         }
 
-        // 2. Optimized Realtime (Teacher Style - Reliable)
-        function startRealtime() {
-            _supabase
-                .channel('student_updates')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'students_attendance' }, (payload) => {
-                    const currentClass = document.getElementById('class-select').value;
-                    // Logic check instead of complex DB filter for better browser stability
-                    if (payload.new.class_name === currentClass) {
-                        loadAttendance();
-                    }
-                })
-                .subscribe((status) => {
-                    const dot = document.getElementById('status-dot');
-                    if (dot) dot.style.background = (status === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
-                });
+        function openModal(category) {
+            const modal = document.getElementById('nameModal');
+            const title = document.getElementById('modalTitle');
+            const listDiv = document.getElementById('modalList');
+            const filtered = globalMergedData.filter(s => s.status === category);
+            
+            title.innerText = `Murid: ${category === 'TIADA' ? 'TIDAK HADIR' : category}`;
+            title.style.color = category === 'HADIR' ? 'var(--success)' : category === 'LEWAT' ? 'var(--warning)' : 'var(--danger)';
+            
+            listDiv.innerHTML = filtered.length === 0 ? 
+                '<p style="color:#94a3b8; text-align:center; padding:20px;">Tiada rekod ditemukan.</p>' :
+                filtered.map((s, idx) => `<div class="modal-item">${idx+1}. ${s.name}</div>`).join('');
+            
+            modal.style.display = "flex";
         }
 
-        // Event Listeners
+        function closeModal() { document.getElementById('nameModal').style.display = "none"; }
+        window.onclick = (e) => { if (e.target == document.getElementById('nameModal')) closeModal(); }
+
+        function startRealtime() {
+            _supabase.channel('student_updates').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'students_attendance' }, (payload) => {
+                if (payload.new.class_name === document.getElementById('class-select').value) loadAttendance();
+            }).subscribe((status) => {
+                const dot = document.getElementById('status-dot');
+                if (dot) dot.style.background = (status === 'SUBSCRIBED') ? 'var(--success)' : 'var(--danger)';
+            });
+        }
+
         document.getElementById('export-pdf').onclick = () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             const cls = document.getElementById('class-select').value;
             doc.text(`Laporan Kehadiran: ${cls}`, 14, 15);
             doc.autoTable({ html: '#main-table', startY: 25, headStyles: {fillColor: [79, 70, 229]} });
-            doc.save(`Kehadiran_${cls}.pdf`);
+            doc.save(`Laporan_${cls}.pdf`);
         };
 
         document.getElementById('export-csv').onclick = () => {
             const cls = document.getElementById('class-select').value;
             let csv = "Nama Murid,Barcode,Status,Waktu\n";
             document.querySelectorAll("#attendance-tbody tr").forEach(tr => {
-                const row = Array.from(tr.querySelectorAll("td")).map(td => `"${td.innerText}"`).join(",");
-                csv += row + "\n";
+                csv += Array.from(tr.querySelectorAll("td")).map(td => `"${td.innerText}"`).join(",") + "\n";
             });
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = url; a.download = `Kehadiran_${cls}.csv`; a.click();
+            a.href = url; a.download = `Rekod_${cls}.csv`; a.click();
         };
 
         document.getElementById('class-select').onchange = loadAttendance;
@@ -373,7 +349,6 @@
         document.getElementById('sort-by').onchange = loadAttendance;
         document.getElementById('search-input').oninput = loadAttendance;
 
-        // Initialize
         window.onload = async () => {
             document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
             await loadClasses();
