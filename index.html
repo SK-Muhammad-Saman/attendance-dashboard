@@ -217,7 +217,13 @@
     <script>
         const SB_URL = 'https://cawrvnutflgvbrisuqtd.supabase.co';
         const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
-        const _supabase = supabase.createClient(SB_URL, SB_KEY);
+        const _supabase = supabase.createClient(SB_URL, SB_KEY, {
+            auth: {
+                persistSession: false, // Don't save session
+                autoRefreshToken: false,
+                detectSessionInUrl: false
+            }
+        });
 
         let globalMergedData = []; 
 
