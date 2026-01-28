@@ -242,7 +242,10 @@
             const searchQuery = document.getElementById('search-input').value.toLowerCase();
             
             // Safety check for mobile: don't proceed if classes aren't loaded yet
-            if (!selectedClass || selectedClass === "Memuatkan kelas...") return;
+            if (!selectedClass || selectedClass === "Memuatkan kelas...") {
+                console.log("Menunggu pilihan kelas yang sah...");
+                return;
+            }
 
             // Show loading state in table
             const tbody = document.getElementById('attendance-tbody');
@@ -367,22 +370,35 @@
         document.getElementById('sort-by').onchange = loadAttendance;
         document.getElementById('search-input').oninput = loadAttendance;
 
-        // FIXED INITIALIZATION FOR MOBILE
-        window.onload = async () => {
-            // 1. Set default date
-            document.getElementById('attendance-date').value = new Date().toISOString().split('T')[0];
-            
-            // 2. Wait for classes to load first
-            const success = await loadClasses();
-            
-            // 3. Only then load attendance
-            if (success) {
-                await loadAttendance();
+        // PADAM window.onload ASAL DAN GANTIKAN DENGAN INI
+        async function initializeApp() {
+            try {
+                // 1. Set tarikh hari ini mengikut zon masa tempatan
+                const now = new Date();
+                const offset = now.getTimezoneOffset() * 60000;
+                const localISOTime = (new Date(now - offset)).toISOString().split('T')[0];
+                document.getElementById('attendance-date').value = localISOTime;
+                
+                // 2. Muat senarai kelas (tunggu sehingga selesai)
+                console.log("Memulakan muat turun kelas...");
+                const success = await loadClasses();
+                
+                // 3. Pastikan kelas berjaya dimuat sebelum panggil data kehadiran
+                if (success) {
+                    console.log("Kelas berjaya dimuat. Mengambil data kehadiran...");
+                    await loadAttendance();
+                    startRealtime();
+                } else {
+                    console.warn("Gagal memuatkan kelas. Cuba semula dalam 2 saat...");
+                    setTimeout(initializeApp, 2000);
+                }
+            } catch (err) {
+                console.error("Ralat semasa initialization:", err);
             }
-            
-            // 4. Start real-time last
-            startRealtime();
-        };
+        }
+
+        // Gunakan Event Listener 'load' yang lebih stabil berbanding window.onload
+        window.addEventListener('load', initializeApp);
     </script>
 </body>
 </html>
