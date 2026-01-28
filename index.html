@@ -257,10 +257,29 @@
             if (!selectedClass) return;
 
             try {
-                const [{ data: students }, { data: attendance }] = await Promise.all([
-                    _supabase.from('students').select('*').eq('class_name_full', selectedClass),
-                    _supabase.from('students_attendance').select('*').eq('class_name', selectedClass).eq('date', selectedDate)
-                ]);
+                // 1. Ambil data kehadiran dahulu
+                const { data: attendance, error: aErr } = await _supabase
+                    .from('students_attendance')
+                    .select('*')
+                    .eq('class_name', selectedClass)
+                    .eq('date', selectedDate);
+
+                // 2. Ambil data murid (Jika RLS halang ini, kita guna data dari attendance sahaja)
+                let { data: students, error: sErr } = await _supabase
+                    .from('students')
+                    .select('*')
+                    .eq('class_name_full', selectedClass);
+
+                // PELAN B: Jika jadual students kosong/RLS, bina senarai dari data kehadiran
+                if (!students || students.length === 0) {
+                    console.warn("Jadual 'students' tidak dapat diakses. Memaparkan data dari rekod kehadiran sahaja.");
+                    students = (attendance || []).map(a => ({
+                        id: a.student_id,
+                        name: a.student_name || "NAMA TIADA DALAM DATABASE",
+                        barcode: a.barcode || "N/A",
+                        class_name_full: a.class_name
+                    }));
+                }
 
                 let merged = (students || []).map(s => {
                     const att = (attendance || []).find(a => String(a.student_id) === String(s.id));
