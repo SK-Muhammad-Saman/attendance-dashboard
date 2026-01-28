@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HadirSEKEMAS Murid | Portal Pemantauan Kehadiran Murid</title>
     
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
@@ -109,9 +109,6 @@
         th { background: #f8fafc; padding: 12px 15px; text-align: left; font-size: 0.7rem; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
         td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
         .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.65rem; font-weight: 800; }
-
-        .new-scan-row { animation: highlightFade 3s ease-out; }
-        @keyframes highlightFade { 0% { background-color: #fef9c3; } 100% { background-color: transparent; } }
 
         .btn { padding: 10px 16px; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
         .btn-pdf { background: #1e293b; color: white; }
@@ -222,19 +219,29 @@
         const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhd3J2bnV0ZmxndmJyaXN1cXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNDcwODgsImV4cCI6MjA4MTYyMzA4OH0.ZLSVVcZUl2muc584TL_UIYxykjrf_F_dOtDJp53A3cU';
         const _supabase = supabase.createClient(SB_URL, SB_KEY);
 
-        let lastAttendanceId = null;
         let globalMergedData = []; 
-        const scanSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
 
         async function loadClasses() {
             try {
-                const { data, error } = await _supabase.from('students').select('class_name_full');
-                if (error || !data || data.length === 0) return false;
+                console.log("Menarik senarai kelas...");
+                let { data, error } = await _supabase.from('students').select('class_name_full');
                 
-                const uniqueClasses = [...new Set(data.map(c => c.class_name_full))].sort();
+                // Fallback jika jadual students bermasalah
+                if (error || !data || data.length === 0) {
+                    console.warn("Gagal tarik dari 'students', mencuba pelan B...");
+                    const { data: altData } = await _supabase.from('students_attendance').select('class_name');
+                    if (!altData || altData.length === 0) return false;
+                    data = altData.map(d => ({ class_name_full: d.class_name }));
+                }
+                
+                const uniqueClasses = [...new Set(data.map(c => c.class_name_full))].filter(Boolean).sort();
                 const select = document.getElementById('class-select');
-                select.innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
-                return true;
+                
+                if (uniqueClasses.length > 0) {
+                    select.innerHTML = uniqueClasses.map(c => `<option value="${c}">${c}</option>`).join('');
+                    return true;
+                }
+                return false;
             } catch (e) {
                 console.error("Ralat loadClasses:", e);
                 return false;
@@ -247,10 +254,7 @@
             const sortBy = document.getElementById('sort-by').value;
             const searchQuery = document.getElementById('search-input').value.toLowerCase();
             
-            if (!selectedClass || selectedClass === "") return;
-
-            const tbody = document.getElementById('attendance-tbody');
-            if (globalMergedData.length === 0) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#94a3b8;">Memuatkan data...</td></tr>';
+            if (!selectedClass) return;
 
             try {
                 const [{ data: students }, { data: attendance }] = await Promise.all([
@@ -260,14 +264,16 @@
 
                 let merged = (students || []).map(s => {
                     const att = (attendance || []).find(a => String(a.student_id) === String(s.id));
-                    let status = 'TIADA', timestamp = '—', attId = null;
+                    let status = 'TIADA', timestamp = '—';
                     if (att) {
-                        attId = att.id;
-                        timestamp = att.timestamp.includes('T') ? att.timestamp.split('T')[1].substring(0,5) : att.timestamp.split(' ')[1].substring(0,5);
-                        const [h, m] = timestamp.split(':').map(Number);
-                        status = (h > 7 || (h === 7 && m > 30)) ? 'LEWAT' : 'HADIR';
+                        try {
+                            const timePart = att.timestamp.includes('T') ? att.timestamp.split('T')[1] : att.timestamp.split(' ')[1];
+                            timestamp = timePart.substring(0,5);
+                            const [h, m] = timestamp.split(':').map(Number);
+                            status = (h > 7 || (h === 7 && m > 30)) ? 'LEWAT' : 'HADIR';
+                        } catch(e) { timestamp = '—'; }
                     }
-                    return { ...s, status, timestamp, attId };
+                    return { ...s, status, timestamp };
                 });
 
                 globalMergedData = merged;
@@ -334,13 +340,13 @@
             });
         }
 
-        // Event Listeners
+        // Listeners
         document.getElementById('class-select').addEventListener('change', loadAttendance);
         document.getElementById('attendance-date').addEventListener('change', loadAttendance);
         document.getElementById('sort-by').addEventListener('change', loadAttendance);
         document.getElementById('search-input').addEventListener('input', loadAttendance);
 
-        // Export PDF & CSV functions...
+        // PDF Export
         document.getElementById('export-pdf').onclick = () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
@@ -350,31 +356,40 @@
             doc.save(`Laporan_${cls}.pdf`);
         };
 
-        // INITIALIZATION
+        // CSV Export
+        document.getElementById('export-csv').onclick = () => {
+            const cls = document.getElementById('class-select').value;
+            let csv = 'Nama,Barcode,Status,Waktu\n';
+            globalMergedData.forEach(s => {
+                csv += `"${s.name}","${s.barcode}","${s.status}","${s.timestamp}"\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `Kehadiran_${cls}.csv`);
+            a.click();
+        };
+
         async function initializeApp() {
             console.log("Memulakan aplikasi...");
-            
-            // 1. Set Tarikh
             const now = new Date();
             const offset = now.getTimezoneOffset() * 60000;
             const localISOTime = (new Date(now - offset)).toISOString().split('T')[0];
             document.getElementById('attendance-date').value = localISOTime;
 
-            // 2. Load Kelas (Mesti AWAIT)
             const success = await loadClasses();
-            
             if (success) {
-                console.log("Kelas berjaya dimuat. Memuatkan kehadiran...");
-                // 3. Selepas kelas ada dalam <select>, baru panggil attendance
+                console.log("Kelas berjaya dimuat.");
                 await loadAttendance();
                 startRealtime();
             } else {
-                console.error("Gagal memuatkan senarai kelas.");
-                setTimeout(initializeApp, 3000); // Cuba semula jika gagal
+                console.error("Gagal memuatkan kelas. Mencuba semula...");
+                setTimeout(initializeApp, 3000);
             }
         }
 
-        window.addEventListener('load', initializeApp);
+        window.addEventListener('DOMContentLoaded', initializeApp);
     </script>
 </body>
 </html>
